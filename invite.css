@@ -1,0 +1,89 @@
+
+/* ===== 60 / 30 / 10 =====
+   60%  fon:       --bg  #0D0D0D
+   30%  kartalar:  --slate #1C1E22, --slate-2 #2A2D33, matn --ink #EDE7DB
+   10%  aksent:    --ac (rejimga qarab)  */
+:root{
+  --bg:#0D0D0D; --slate:#1C1E22; --slate-2:#2A2D33; --line:#34383f;
+  --ink:#EDE7DB; --mute:#9A978F; --paper:#E9E2D3; --paper-d:#CFC6B2;
+  --ac:#FF5A00; --ac2:#FFC93C; --on-ac:#1A0A00;
+  --display:'Bricolage Grotesque','Arial Black',sans-serif;
+  --body:'Hanken Grotesk',system-ui,sans-serif;
+  --dstyle:normal; --dweight:800;
+}
+html[data-mode="wedding"]{
+  --ac:#D8B26E; --ac2:#F0D5CC; --on-ac:#17110A;
+  --display:'Cormorant Garamond',Georgia,serif; --dstyle:italic; --dweight:600;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--body);overflow:hidden}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:30}
+
+/* sahna */
+.stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;perspective:1100px}
+.glow{position:absolute;width:70vmin;height:70vmin;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--ac) 22%,transparent),transparent 65%);filter:blur(20px);pointer-events:none}
+
+/* ===== KONVERT ===== */
+.env-btn{position:relative;border:0;background:none;padding:0;cursor:pointer;width:min(86vw,380px);aspect-ratio:3/2;perspective:900px;transform-style:preserve-3d}
+.env{position:absolute;inset:0;transform-style:preserve-3d}
+.env-back{position:absolute;inset:0;background:var(--paper-d);border-radius:6px;box-shadow:0 30px 60px rgba(0,0,0,.6)}
+.letter{position:absolute;left:6%;right:6%;top:8%;height:84%;background:var(--slate);border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;z-index:2}
+.letter span{font:var(--dstyle) var(--dweight) 1.35rem/1.2 var(--display);color:var(--ac)}
+.env-front{position:absolute;inset:0;z-index:3;border-radius:6px;
+  background:linear-gradient(160deg,#F1EBDD,var(--paper));
+  clip-path:polygon(0 0,50% 52%,100% 0,100% 100%,0 100%)}
+.env-front::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.12),transparent 50%)}
+.flap{position:absolute;left:0;right:0;top:0;height:56%;z-index:4;transform-origin:50% 0;
+  background:linear-gradient(180deg,#F4EEE0,var(--paper));
+  clip-path:polygon(0 0,100% 0,50% 100%);backface-visibility:visible;filter:drop-shadow(0 6px 6px rgba(0,0,0,.25))}
+.flap.inner{background:linear-gradient(180deg,#BDB39C,#D4CBB7);z-index:1}
+.seal{position:absolute;left:50%;top:47%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;z-index:6;
+  background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--ac) 70%,#fff),var(--ac) 55%,color-mix(in srgb,var(--ac) 60%,#000));
+  box-shadow:0 4px 10px rgba(0,0,0,.45);display:grid;place-items:center;color:var(--on-ac);font:700 1.1rem var(--display)}
+/* yirtiladigan tasma */
+.tear{position:absolute;left:-1%;right:-1%;top:-1%;height:17%;z-index:7;transform-origin:100% 50%;
+  background:repeating-linear-gradient(90deg,transparent 0 9px,rgba(0,0,0,.07) 9px 10px),linear-gradient(180deg,#FBF7EC,var(--paper));
+  filter:drop-shadow(0 3px 3px rgba(0,0,0,.3))}
+.tear::before{content:"";position:absolute;left:3%;right:3%;top:30%;border-top:2px dashed rgba(0,0,0,.28)}
+.hint{position:absolute;left:0;right:0;bottom:-54px;text-align:center;color:var(--mute);font-size:.9rem}
+.hint i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ac);margin-right:8px;animation:pulse 1.6s infinite}
+@keyframes pulse{50%{transform:scale(1.8);opacity:.35}}
+.idle{animation:sway 3.2s ease-in-out infinite}
+@keyframes sway{50%{transform:translateY(-8px) rotate(-.8deg)}}
+
+/* ===== TAKLIF KARTASI ===== */
+.invite{position:absolute;width:min(92vw,420px);max-height:calc(100% - 32px);overflow:auto;background:var(--slate);border:1px solid var(--line);border-radius:22px;padding:30px 24px 24px;text-align:center;visibility:hidden;opacity:0}
+.invite::before{content:"";position:absolute;inset:8px;border:1px solid color-mix(in srgb,var(--ac) 45%,transparent);border-radius:16px;pointer-events:none}
+.occ{color:var(--ac);font-size:.95rem;font-weight:500;margin:0 0 6px}
+.invite h1{margin:0;font:var(--dstyle) var(--dweight) clamp(2rem,9vw,2.7rem)/1.05 var(--display);letter-spacing:-.01em}
+.who{margin:14px 0 4px;font:var(--dstyle) var(--dweight) 1.6rem/1.1 var(--display);color:var(--ac2)}
+.msg{color:var(--mute);margin:10px auto 0;max-width:30ch}
+.when{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-radius:14px;overflow:hidden;margin:20px 0 0;text-align:left}
+.when div{background:var(--slate-2);padding:12px 14px}
+.when .full{grid-column:1/-1}
+.when small{display:block;color:var(--mute);font-size:.78rem}
+.when b{font-weight:600}
+.rsvp{display:grid;gap:10px;margin-top:18px}
+.rsvp button{border:0;border-radius:999px;padding:14px;font:600 .95rem var(--body);cursor:pointer;transition:transform .12s}
+.rsvp button:active{transform:scale(.98)}
+.rsvp .yes{background:var(--ac);color:var(--on-ac)}
+.rsvp .no{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.thanks{display:none;margin-top:18px;color:var(--ac2);font:var(--dstyle) var(--dweight) 1.3rem var(--display)}
+
+@media (prefers-reduced-motion:reduce){.idle,.hint i{animation:none}}
+
+/* ---- qo'shimcha: rasm, taymer, tugmalar ---- */
+.photo{width:128px;height:128px;border-radius:50%;object-fit:cover;border:3px solid var(--ac);box-shadow:0 0 0 7px var(--slate),0 0 0 8px var(--line);margin:0 auto 16px;display:block}
+.cd{display:flex;gap:8px;justify-content:center;margin:18px 0 0}
+.cd div{background:var(--slate-2);border:1px solid var(--line);border-radius:12px;padding:8px 6px;min-width:60px}
+.cd b{display:block;font:var(--dstyle) var(--dweight) 1.35rem/1.1 var(--display);color:var(--ac2)}
+.cd span{font-size:.72rem;color:var(--mute)}
+.lnk{display:block;border:1px solid var(--line);border-radius:999px;padding:12px;margin-top:10px;color:var(--ink);text-decoration:none;font:500 .9rem var(--body)}
+.lnk:focus-visible{outline:2px solid var(--ac2);outline-offset:3px}
+.arena{position:relative;height:150px;margin-top:10px}
+.arena .yes{position:absolute;left:50%;top:14px;transform:translateX(-50%);padding:14px 44px;border:0;border-radius:999px;background:var(--ac);color:var(--on-ac);font:600 1rem var(--body);cursor:pointer}
+.arena .no{position:absolute;left:12px;top:96px;padding:9px 16px;border-radius:999px;background:transparent;color:var(--ink);border:1px solid var(--line);font:500 .85rem var(--body);cursor:pointer;transition:left .25s,top .25s}
+.cn{min-height:1.4em;color:var(--mute);font-size:.85rem;margin-top:6px}
+.by{color:var(--mute);font-size:.78rem;margin-top:18px}
