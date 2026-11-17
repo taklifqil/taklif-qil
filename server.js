@@ -43,79 +43,59 @@ function parseWhen(t) {
   return { iso: `${y}-${p(mo)}-${p(d)}T${p(h)}:${p(mi)}:00+05:00`, text: `${d}-${MON[mo - 1]}, ${DAY[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()]}`, time: `${p(h)}:${p(mi)}` };
 }
 
-/* ---------- Invitation page ---------- */
+/* ---------- Invitation page (qora dizayn, public/invite.css + public/invite.js) ---------- */
+const SEAL = { toy: '♥', tug: '★', uch: '♥', yub: '★', bosh: '✦' };
 function page(i) {
-  const p = PAL[i.dir] || PAL.bq, F = FONTS[i.style] || FONTS[1], O = OCC[i.occ] || OCC.bosh;
-  const D = JSON.stringify({ iso: i.iso, emo: O.emo, id: i.id, occ: i.occ, title: O.t }).replace(/</g, '\\u003c');
+  const O = OCC[i.occ] || OCC.bosh, isU = i.occ === 'uch';
+  const mode = (i.occ === 'tug' || i.occ === 'bosh') ? 'birthday' : 'wedding';
+  const D = JSON.stringify({ iso: i.iso, id: i.id, occ: i.occ, mode }).replace(/</g, '\\u003c');
   const g = d => d.toISOString().replace(/[-:]|\.\d{3}/g, '');
   const t0 = new Date(i.iso), t1 = new Date(t0.getTime() + 3 * 3600000);
   const cal = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(O.lab + ': ' + i.from) + '&dates=' + g(t0) + '/' + g(t1) + '&location=' + encodeURIComponent(i.where || '');
   const map = i.where ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(i.where) : '';
-  const isU = i.occ === 'uch';
-  return `<!doctype html><html lang="uz"><head><meta charset="utf-8"><title>${esc(O.lab)} — ${esc(i.from)}</title>
+  const title = isU ? esc(i.to) + ', uchrashamizmi?' : (i.occ === 'toy' ? esc(i.from) : esc(O.t));
+  const sub = isU ? '' : (i.occ === 'toy' ? '<div class="who">' + esc(O.t) + '</div>' : '<div class="who">' + esc(i.from) + '</div>');
+  return `<!doctype html><html lang="uz" data-mode="${mode}"><head><meta charset="utf-8"><title>${esc(O.lab)} — ${esc(i.from)}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0D0D0D">
 <meta property="og:title" content="${esc(O.t)}"><meta property="og:description" content="${esc(i.from)} sizni taklif qilmoqda 💌">
 ${i.photo ? '<meta property="og:image" content="' + BASE + '/p/' + esc(i.photo) + '">' : ''}
-<link href="https://fonts.googleapis.com/css2?family=${F[2]}&display=swap" rel="stylesheet">
-<style>
-:root{--a:${p[0]};--bg:${p[1]};--g:${p[2]};--h:'${F[0]}',serif;--b:'${F[1]}',sans-serif}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 10%,#fff,var(--bg));font-family:var(--b);color:#2b2024;display:flex;justify-content:center;padding:18px;overflow-x:hidden}
-#env{position:fixed;inset:0;background:var(--a);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;z-index:50;cursor:pointer;transition:transform .9s,opacity .9s}
-#env .e{font-size:5rem;animation:bob 1.6s infinite}#env p{letter-spacing:.2em;text-transform:uppercase;font-size:.8rem}
-#env.go{transform:translateY(-100%);opacity:0;pointer-events:none}
-@keyframes bob{50%{transform:translateY(-12px) scale(1.08)}}
-.card{width:100%;max-width:460px;background:#fff;border-radius:28px;padding:30px 24px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.15);border:2px solid var(--g);position:relative;opacity:0;transform:translateY(30px);transition:all 1s .5s}
-.card.on{opacity:1;transform:none}
-.ph{width:150px;height:150px;border-radius:50%;object-fit:cover;border:4px solid var(--g);box-shadow:0 0 0 8px rgba(255,255,255,.8),0 0 0 10px var(--g);animation:glow 3s infinite}
-@keyframes glow{50%{box-shadow:0 0 0 8px #fff,0 0 28px 12px var(--g)}}
-.lab{font-size:.72rem;letter-spacing:.25em;text-transform:uppercase;color:var(--a);font-weight:600;margin:18px 0 6px}
-h1{font-family:var(--h);font-weight:500;font-size:2.2rem;color:var(--a);margin:6px 0}
-.nm{font-family:var(--h);font-size:2.6rem;color:var(--g);margin:4px 0 10px;line-height:1.1}
-p{line-height:1.6;margin:10px 0;color:#5a4a4e}
-.box{background:var(--bg);border-radius:18px;padding:14px;margin:16px 0;text-align:left;line-height:1.9}
-.cd{display:flex;gap:8px;justify-content:center;margin:14px 0}.cd div{background:var(--a);color:#fff;border-radius:12px;padding:8px 10px;min-width:58px}.cd b{display:block;font-size:1.3rem}.cd span{font-size:.6rem;letter-spacing:.1em;text-transform:uppercase}
-.btn{display:block;width:100%;border:0;border-radius:999px;padding:14px;margin-top:10px;background:var(--a);color:#fff;font:600 .85rem var(--b);letter-spacing:.1em;text-decoration:none;cursor:pointer}
-.btn.o{background:none;color:var(--a);border:1px solid var(--a)}
-.arena{position:relative;height:150px}.arena .btn{position:absolute;width:auto;padding:14px 38px;left:50%;top:20px;transform:translateX(-50%);transition:transform .2s}
-#no{left:20px;top:100px;transform:none;background:#fff;color:#333;border:1px solid #ccc;padding:9px 16px;transition:all .25s}
-.f{position:fixed;bottom:-40px;pointer-events:none;animation:fl linear forwards;z-index:5}
-@keyframes fl{to{transform:translateY(-115vh) rotate(60deg);opacity:.2}}
-.sm{font-size:.7rem;color:#999;margin-top:18px}
-</style></head><body>
-<div id="env"><div class="e">${isU ? '💌' : '✉️'}</div><p>Ochish uchun bosing</p></div>
-<div class="card" id="card">
-${i.photo ? '<img class="ph" src="/p/' + esc(i.photo) + '" alt="">' : '<div style="font-size:4rem">' + O.emo[0] + '</div>'}
-<div class="lab">${esc(O.lab)}</div>
-${i.to && !isU ? '<p>Hurmatli <b>' + esc(i.to) + '</b>,</p>' : ''}
-<h1>${isU ? esc(i.to) + ', uchrashamizmi?' : esc(O.t)}</h1>
-${isU ? '' : '<div class="nm">' + esc(i.from) + '</div>'}
-${i.msg ? '<p>' + esc(i.msg).replace(/\n/g, '<br>') + '</p>' : ''}
-<div class="box">📅 <b>${esc(i.dateText)}</b><br>🕒 <b>${esc(i.time)}</b>${i.where ? '<br>📍 ' + esc(i.where) : ''}</div>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Cormorant+Garamond:ital,wght@0,500;1,500;1,600&family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/s/invite.css">
+</head><body>
+<canvas id="fx" aria-hidden="true"></canvas>
+<main class="stage"><div class="glow"></div>
+<button class="env-btn idle" id="envBtn" type="button" aria-label="Konvertni yirtib ochish">
+  <div class="env" id="env"><div class="env-back"></div><div class="flap inner" id="flapIn"></div>
+  <div class="letter" id="letter"><span>${esc(O.lab)}</span></div><div class="env-front"></div>
+  <div class="flap" id="flap"></div><div class="seal" id="seal" aria-hidden="true">${SEAL[i.occ] || '✦'}</div><div class="tear" id="tear"></div></div>
+  <div class="hint" id="hint"><i></i>Yirtish uchun bosing</div>
+</button>
+<article class="invite" id="invite">
+${i.photo ? '<img class="photo" src="/p/' + esc(i.photo) + '" alt="">' : ''}
+<p class="occ">${esc(O.lab)}</p>
+${i.to && !isU ? '<p class="msg" style="margin:0 auto 8px">Hurmatli <b>' + esc(i.to) + '</b>,</p>' : ''}
+<h1>${title}</h1>${sub}
+${i.msg ? '<p class="msg">' + esc(i.msg).replace(/\n/g, '<br>') + '</p>' : ''}
+<div class="when"><div><small>Sana</small><b>${esc(i.dateText)}</b></div><div><small>Vaqt</small><b>${esc(i.time)}</b></div>${i.where ? '<div class="full"><small>Manzil</small><b>' + esc(i.where) + '</b></div>' : ''}</div>
 <div class="cd" id="cd"></div>
-${isU ? '<div class="arena" id="ar"><button class="btn" id="ha" onclick="rsvp(\'yes\')">♥ HA</button><button class="btn" id="no">Yo‘q</button></div><div class="sm" id="cn"></div>'
- : '<button class="btn" onclick="rsvp(\'yes\')">✅ BORAMAN</button><button class="btn o" onclick="rsvp(\'no\')">Kela olmayman</button>'}
-<div id="ty" style="display:none"><p style="color:var(--a);font-size:1.2rem"><b>Javobingiz yuborildi 💖</b></p></div>
-${map ? '<a class="btn o" target="_blank" rel="noopener" href="' + map + '">📍 XARITADA KO‘RISH</a>' : ''}
-<a class="btn o" target="_blank" rel="noopener" href="${cal}">📅 KALENDARGA QO‘SHISH</a>
-<div class="sm">${esc(i.from)} tomonidan ilqlik bilan yaratildi</div>
-</div>
-<script>
-var D=${D};
-function fly(n){for(var k=0;k<n;k++){var s=document.createElement('span');s.className='f';s.textContent=D.emo[k%D.emo.length];s.style.left=Math.random()*100+'vw';s.style.fontSize=(14+Math.random()*26)+'px';s.style.animationDuration=(4+Math.random()*5)+'s';document.body.appendChild(s);(function(x){setTimeout(function(){x.remove()},9500)})(s)}}
-document.getElementById('env').onclick=function(){this.classList.add('go');document.getElementById('card').classList.add('on');fly(18);setInterval(function(){fly(2)},1200)};
-function tick(){var d=new Date(D.iso)-new Date(),c=document.getElementById('cd');if(isNaN(d)||d<0){c.style.display='none';return}var v=[[86400000,'kun'],[3600000,'soat'],[60000,'daqiqa'],[1000,'soniya']],h='';for(var k=0;k<4;k++){var n=Math.floor(d/v[k][0]);d-=n*v[k][0];h+='<div><b>'+n+'</b><span>'+v[k][1]+'</span></div>'}c.innerHTML=h}
-tick();setInterval(tick,1000);
-function rsvp(a){fetch('/api/rsvp/'+D.id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer:a})}).catch(function(){});
- ['ar'].forEach(function(x){var e=document.getElementById(x);if(e)e.style.display='none'});document.querySelectorAll('.btn:not(.o)').forEach(function(b){b.style.display='none'});
- document.querySelectorAll('.btn.o').forEach(function(b){if(!b.href)b.style.display='none'});document.getElementById('ty').style.display='block';if(a==='yes')fly(40)}
-var no=document.getElementById('no'),t=0,M=['Aniqmi?','Juda iltimos qilsam-chi?','Yana bir bor o‘ylab ko‘rasizmi?','Yuragim sinadi…','Oxirgi marta so‘rayman!','Mayli, tugma yo‘qoldi 😄'];
-if(no){var run=function(e){e.preventDefault();t++;var ar=document.getElementById('ar');no.style.left=Math.random()*(ar.clientWidth-90)+'px';no.style.top=Math.random()*(ar.clientHeight-40)+'px';document.getElementById('cn').textContent=M[Math.min(t-1,M.length-1)];document.getElementById('ha').style.transform='translateX(-50%) scale('+Math.min(1+t*.12,1.9)+')';if(t>=6)no.style.display='none'};no.addEventListener('mouseenter',run);no.addEventListener('touchstart',run,{passive:false});no.addEventListener('click',run)}
-</script></body></html>`;
+${isU ? '<div class="arena" id="ar"><button class="yes" type="button" onclick="rsvp(\'yes\')">♥ HA</button><button class="no" id="no" type="button">Yo‘q</button></div><div class="cn" id="cn"></div>'
+ : '<div class="rsvp" id="rsvp"><button class="yes" type="button" onclick="rsvp(\'yes\')">Boraman</button><button class="no" type="button" onclick="rsvp(\'no\')">Kela olmayman</button></div>'}
+<div class="thanks" id="thanks">Javobingiz yuborildi 💖</div>
+${map ? '<a class="lnk" target="_blank" rel="noopener" href="' + map + '">Xaritada ko‘rish</a>' : ''}
+<a class="lnk" target="_blank" rel="noopener" href="${cal}">Kalendarga qo‘shish</a>
+<div class="by">${esc(i.from)} tomonidan ilqlik bilan yaratildi</div>
+</article></main>
+<script>window.D=${D};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="/s/invite.js"></script>
+</body></html>`;
 }
 
 /* ---------- Web ---------- */
 const app = express();
 app.use(express.json());
+app.use('/s', express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
 app.use('/p', express.static(path.join(DIR, 'photos'), { maxAge: '7d' }));
 app.get('/', (q, r) => r.send('Taklifnoma boti ishlayapti 💌'));
 app.get('/i/:id', (q, r) => { const i = invites[q.params.id]; if (!i) return r.status(404).send('Taklif topilmadi'); if (i.off) return r.status(410).send('Bu taklif faol emas'); r.send(page(i)); });
