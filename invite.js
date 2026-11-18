@@ -2,7 +2,7 @@
 (function(){
 var D=window.D,$=function(i){return document.getElementById(i)};
 var mode=D.mode,isU=D.occ==='uch',opened=false;
-var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches || localStorage.getItem('tq_motion')==='off';
 
 /* yirtilgan chet */
 (function(){var pts=[],n=34;for(var i=n;i>=0;i--){pts.push((i/n*100).toFixed(1)+'% '+(62+Math.random()*34-(i%2?10:0)).toFixed(0)+'%')}
@@ -24,7 +24,7 @@ function make(type,x,y,burst){
     col:PAL[Math.floor(Math.random()*PAL.length)],sway:w?R(.4,1.2):0}
 }
 function burst(){
-  var r=$('env').getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height*.35,N=reduce?24:(w?110:170);
+  var r=$('env').getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height*.35,N=reduce?0:(w?80:110);
   for(var i=0;i<N;i++){
     var k=Math.random(),t;
     if(isU)t=k<.6?'heart':k<.85?'spark':'circle';
@@ -66,7 +66,7 @@ function draw(){
     cx.restore();
   }
 }
-gsap.ticker.add(draw);
+if(!reduce)gsap.ticker.add(draw);
 
 /* konvert ochilishi */
 function showInvite(){
@@ -106,13 +106,17 @@ function tick(){
 tick();setInterval(tick,1000);
 
 /* RSVP */
-window.rsvp=function(a){
-  fetch('/api/rsvp/'+D.id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer:a})}).catch(function(){});
-  var ar=$('ar'),rs=$('rsvp');if(ar)ar.style.display='none';if(rs)rs.style.display='none';
-  var cn=$('cn');if(cn)cn.style.display='none';
-  $('thanks').style.display='block';gsap.from('#thanks',{scale:.8,opacity:0,duration:.5,ease:'back.out(2)'});
-  if(a==='yes'){var r=$('thanks').getBoundingClientRect();
-    for(var i=0;i<60;i++)P.push(make(isU?'heart':(w?'petal':'rect'),r.left+r.width/2,r.top,true))}
+window.rsvp=async function(a){
+  var buttons=document.querySelectorAll('#rsvp button,#ar button');
+  buttons.forEach(function(b){b.disabled=true});
+  try {
+    var response=await fetch('/api/rsvp/'+encodeURIComponent(D.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer:a,name:$('guestName')?.value||''})});
+    if(!response.ok)throw new Error('Javobni saqlashda xatolik');
+    var ar=$('ar'),rs=$('rsvp');if(ar)ar.style.display='none';if(rs)rs.style.display='none';
+    var cn=$('cn');if(cn)cn.style.display='none';
+    $('thanks').style.display='block';if(!reduce)gsap.from('#thanks',{scale:.8,opacity:0,duration:.5,ease:'back.out(2)'});
+    if(a==='yes'&&!reduce){var r=$('thanks').getBoundingClientRect();for(var i=0;i<45;i++)P.push(make(isU?'heart':(w?'petal':'rect'),r.left+r.width/2,r.top,true));}
+  } catch(e) {alert('Internet yoki server xatosi: javob saqlanmadi. Qayta urinib ko‘ring.');buttons.forEach(function(b){b.disabled=false});}
 };
 /* "Yo'q" tugmasi qochadi (faqat uchrashuv) */
 var no=$('no');

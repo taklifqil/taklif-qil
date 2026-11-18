@@ -1,315 +1,171 @@
-const { Telegraf, Markup } = require('telegraf');
-const express = require('express');
-const fs = require('fs'), path = require('path'), crypto = require('crypto');
-
-const PORT = process.env.PORT || 3000;
-const BASE = (process.env.BASE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : 'http://localhost:' + PORT)).replace(/\/$/, '');
-const DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
-fs.mkdirSync(path.join(DIR, 'photos'), { recursive: true });
-const DB = path.join(DIR, 'invites.json');
-let invites = {};
-try { invites = JSON.parse(fs.readFileSync(DB, 'utf8')); } catch (e) {}
-const atomic = (f, o) => { fs.writeFileSync(f + '.tmp', JSON.stringify(o)); fs.renameSync(f + '.tmp', f); };
-const save = () => atomic(DB, invites);
-const UDB = path.join(DIR, 'users.json');
-let users = {};
-try { users = JSON.parse(fs.readFileSync(UDB, 'utf8')); } catch (e) {}
-const saveU = () => atomic(UDB, users);
-const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-const MON = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'];
-const DAY = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
-const OCC = {
-  toy:  { n: '💍 To‘y', t: 'Sizni to‘yimizga taklif qilamiz', emo: ['💍', '🤍', '✨', '🕊'], lab: 'To‘y taklifnomasi' },
-  tug:  { n: '🎂 Tug‘ilgan kun', t: 'Tug‘ilgan kunimga taklif', emo: ['🎈', '🎉', '🎂', '🎁'], lab: 'Tug‘ilgan kun' },
-  uch:  { n: '❤️ Uchrashuv', t: 'Uchrashamizmi?', emo: ['❤', '✨', '💗'], lab: 'Faqat siz uchun' },
-  yub:  { n: '🥂 Yubiley', t: 'Yubileyga taklif', emo: ['🥂', '✨', '🏆'], lab: 'Yubiley' },
-  bosh: { n: '✨ Boshqa', t: 'Sizni taklif qilaman', emo: ['✨', '💌', '🌟'], lab: 'Taklifnoma' }
+'use strict';
+const express=require('express');
+const {Telegraf,Markup}=require('telegraf');
+const helmet=require('helmet');
+const {rateLimit}=require('express-rate-limit');
+const crypto=require('node:crypto');
+const path=require('node:path');
+const fs=require('node:fs');
+const db=require('./db');
+const {page,OCC,DIRS,parseWhen,esc}=require('./invitation');
+const {checkMini,checkLogin}=require('./auth');
+const {validate,clean}=require('./validate');
+const PORT=Number(process.env.PORT||3000);
+const BASE=(process.env.BASE_URL||(process.env.RAILWAY_PUBLIC_DOMAIN?'https://'+process.env.RAILWAY_PUBLIC_DOMAIN:'http://localhost:'+PORT)).replace(/\/$/,'');
+const TOKEN=process.env.BOT_TOKEN;
+const ADMIN_ID=String(process.env.ADMIN_TELEGRAM_ID||'');
+const bot=TOKEN?new Telegraf(TOKEN):null;
+const app=express();app.disable('x-powered-by');app.set('trust proxy',1);
+app.use(helmet({contentSecurityPolicy:false,crossOriginEmbedderPolicy:false}));
+app.use(express.json({limit:'100kb'}));
+app.use('/api',rateLimit({windowMs:60*1000,limit:100,standardHeaders:'draft-7',legacyHeaders:false}));
+// Only serve approved public files; never expose source code or secrets.
+const PUBLIC_ASSETS = new Set(['invite.css','invite.js','style.css','web.js']);
+app.get('/s/:asset',(req,res,next)=>{
+  const asset=req.params.asset;
+  if(!PUBLIC_ASSETS.has(asset))return res.sendStatus(404);
+  return res.sendFile(path.join(__dirname,asset),{maxAge:'1h'},next);
+});
+const run=f=>(req,res,next)=>Promise.resolve().then(()=>f(req,res,next)).catch(next);
+const newId=()=>crypto.randomBytes(10).toString('hex');
+const url=id=>BASE+'/i/'+encodeURIComponent(id);
+const isHttps=BASE.startsWith('https://');
+const cookie=req=>Object.fromEntries((req.headers.cookie||'').split(';').map(x=>x.trim().split('=').map(decodeURIComponent)).filter(x=>x.length===2));
+const sessionHash=x=>crypto.createHash('sha256').update(x).digest('hex');
+const sessionUser=async req=>{
+ const token=cookie(req).tq_session;if(!token||!/^[a-f0-9]{64}$/.test(token))return null;
+ const r=await db.q('SELECT u.id,u.blocked FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()',[sessionHash(token)]);
+ return r.rows[0]&&!r.rows[0].blocked?{id:Number(r.rows[0].id)}:null;
 };
-const DIRS = { bb: '👦→👦 Boladan bolaga', bq: '👦→👩 Boladan qizga', qb: '👩→👦 Qizdan bolaga', qq: '👩→👩 Qizdan qizga' };
-const PAL = { bb: ['#1f3a5f', '#e9f0fa', '#c9a24b'], bq: ['#8e2f44', '#f7ece8', '#c9a24b'], qb: ['#a8456b', '#fcedf2', '#c9a24b'], qq: ['#6b3fa0', '#f3ecfa', '#d4a84b'] };
-const FONTS = {
-  1: ['Great Vibes', 'Cormorant Garamond', 'Great+Vibes&family=Cormorant+Garamond:wght@400;600'],
-  2: ['Playfair Display', 'Poppins', 'Playfair+Display:ital,wght@0,600;1,500&family=Poppins:wght@400;500'],
-  3: ['Poppins', 'Poppins', 'Poppins:wght@400;700;800']
-};
-
-function parseWhen(t) {
-  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})$/.exec(t.trim());
-  if (!m) return null;
-  const [, d, mo, y, h, mi] = m.map(Number);
-  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) return null;
-  const p = n => String(n).padStart(2, '0');
-  return { iso: `${y}-${p(mo)}-${p(d)}T${p(h)}:${p(mi)}:00+05:00`, text: `${d}-${MON[mo - 1]}, ${DAY[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()]}`, time: `${p(h)}:${p(mi)}` };
+const csrf=req=>{if(!req.headers.origin)return false;try{return new URL(req.headers.origin).origin===new URL(BASE).origin;}catch{return false;}};
+const auth=run(async(req,res,next)=>{
+ let u=null;
+ if(req.headers['x-init-data']){
+  try {u=checkMini(req.headers['x-init-data'],TOKEN);}catch{return res.status(401).json({error:'Telegram autentifikatsiyasi xato'});}
+  if(!await db.upsertUser(u))return res.sendStatus(403);
+ }else u=await sessionUser(req);
+ if(!u)return res.status(401).json({error:'Telegram orqali tizimga kiring'});
+ req.user=u;next();
+});
+const requireWrite=(req,res,next)=>{if(req.headers['x-init-data']||csrf(req))return next();return res.sendStatus(403);};
+const admin=[auth,(req,res,next)=>String(req.user.id)===ADMIN_ID&&ADMIN_ID?next():res.sendStatus(403)];
+const own=async(req,res)=>{const i=await db.invitation(req.params.id);if(!i||String(i.owner)!==String(req.user.id)){res.sendStatus(404);return null;}return i;};
+const notify=(id,msg)=>bot&&bot.telegram.sendMessage(id,msg).catch(()=>{});
+const summary=async i=>({...i,...await db.rsvpCounts(i.id),url:url(i.id)});
+app.get('/health',run(async(req,res)=>{await db.q('SELECT 1');res.json({ok:true,database:'connected',botConfigured:!!TOKEN});}));
+app.get('/',(req,res)=>res.sendFile(path.join(__dirname,'web.html')));
+app.get('/app',(req,res)=>res.sendFile(path.join(__dirname,'web.html')));
+app.get('/legacy-app',(req,res)=>{
+ let html=fs.readFileSync(path.join(__dirname,'miniapp.html'),'utf8');
+ html=html.replace('__CFG__',JSON.stringify({OCC,DIRS,BASE}).replace(/</g,'\\u003c'));
+ res.type('html').send(html);
+});
+app.get('/auth/telegram',run(async(req,res)=>{
+ let user;try{user=checkLogin(req.query,TOKEN);}catch{return res.status(401).send('Telegram login tekshiruvidan o‘tmadi');}
+ if(!await db.upsertUser(user))return res.sendStatus(403);
+ const secret=crypto.randomBytes(32).toString('hex');
+ await db.q("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '7 days')",[sessionHash(secret),user.id]);
+ res.cookie('tq_session',secret,{httpOnly:true,sameSite:'lax',secure:isHttps,maxAge:7*86400000,path:'/'}).redirect('/');
+}));
+app.post('/api/logout',requireWrite,run(async(req,res)=>{const secret=cookie(req).tq_session;if(secret)await db.q('DELETE FROM sessions WHERE token_hash=$1',[sessionHash(secret)]);res.clearCookie('tq_session',{path:'/'}).json({ok:true});}));
+app.get('/api/config',(req,res)=>res.json({botUsername:process.env.BOT_USERNAME||'',base:BASE,adminConfigured:!!ADMIN_ID,templates:OCC}));
+app.get('/api/me',auth,(req,res)=>res.json({id:req.user.id,admin:String(req.user.id)===ADMIN_ID}));
+app.get('/p/:name',run(async(req,res)=>{
+ if(!/^[a-f0-9]{32}\.jpg$/.test(req.params.name))return res.sendStatus(404);
+ const r=await db.q('SELECT content FROM photos WHERE id=$1',[req.params.name]);if(!r.rowCount)return res.sendStatus(404);
+ res.set('Cache-Control','public,max-age=3600').type('image/jpeg').send(r.rows[0].content);
+}));
+app.get('/i/:id',run(async(req,res)=>{
+ const i=await db.invitation(req.params.id);if(!i)return res.status(404).send('Taklifnoma topilmadi');if(i.off)return res.status(410).send('Taklifnoma faol emas');
+ db.q('INSERT INTO views(invite_id) VALUES($1) ON CONFLICT(invite_id,viewed_on) DO UPDATE SET hits=views.hits+1',[i.id]).catch(()=>{});
+ res.type('html').send(page(i));
+}));
+app.post('/api/rsvp/:id',rateLimit({windowMs:60*1000,limit:10}),run(async(req,res)=>{
+ const i=await db.invitation(req.params.id);if(!i)return res.sendStatus(404);if(i.off)return res.sendStatus(410);
+ if(!['yes','no'].includes(req.body?.answer))return res.status(400).json({error:'Javob noto‘g‘ri'});
+ const guest=clean(req.body?.name,120);
+ await db.q('INSERT INTO rsvps(invite_id,answer,guest_name) VALUES($1,$2,$3)',[i.id,req.body.answer,guest]);
+ notify(i.owner,`💌 Yangi RSVP: ${req.body.answer==='yes'?'✅ Keladi':'❌ Kela olmaydi'}\n${guest||'Noma’lum mehmon'}\n${url(i.id)}`);
+ res.json({ok:true});
+}));
+app.post('/api/app/photo',auth,express.raw({type:'image/jpeg',limit:'6mb'}),run(async(req,res)=>{
+ const b=req.body;if(!Buffer.isBuffer(b)||b.length<4||b[0]!==255||b[1]!==216||b[2]!==255)return res.status(400).json({error:'JPEG rasm kerak'});
+ const name=crypto.randomBytes(16).toString('hex')+'.jpg';await db.q('INSERT INTO photos(id,owner,content) VALUES($1,$2,$3)',[name,req.user.id,b]);res.json({photo:name});
+}));
+app.get('/api/app/invites',auth,run(async(req,res)=>{
+ const items=await db.listInvites(req.user.id);res.json(await Promise.all(items.map(summary)));
+}));
+app.post('/api/app/invites',auth,requireWrite,run(async(req,res)=>{
+ let d;try{d=validate(req.body);}catch(e){return res.status(400).json({error:e.message});}
+ const items=await db.listInvites(req.user.id);if(items.length>=100)return res.status(429).json({error:'100 ta taklifnoma limitiga yetdingiz'});
+ if(d.photo){const r=await db.q('SELECT 1 FROM photos WHERE id=$1 AND owner=$2',[d.photo,req.user.id]);if(!r.rowCount)return res.status(400).json({error:'Rasm sizga tegishli emas'});}
+ d.id=newId();d.owner=req.user.id;await db.saveInvite(d);notify(req.user.id,`🎉 Taklifnoma tayyor!\n${url(d.id)}`);res.status(201).json({id:d.id,url:url(d.id)});
+}));
+app.put('/api/app/invites/:id',auth,requireWrite,run(async(req,res)=>{
+ const i=await own(req,res);if(!i)return;
+ let d;try{d=validate(req.body);}catch(e){return res.status(400).json({error:e.message});}
+ if(d.photo){const p=await db.q('SELECT 1 FROM photos WHERE id=$1 AND owner=$2',[d.photo,req.user.id]);if(!p.rowCount)return res.sendStatus(403);}
+ await db.q('UPDATE invites SET data=$1 WHERE id=$2',[JSON.stringify({...d}),i.id]);res.json({ok:true,url:url(i.id)});
+}));
+app.get('/api/app/invites/:id',auth,run(async(req,res)=>{
+ const i=await own(req,res);if(!i)return;res.json(await summary(i));
+}));
+app.get('/api/app/invites/:id/guests',auth,run(async(req,res)=>{
+ const i=await own(req,res);if(!i)return;
+ const {rows}=await db.q('SELECT answer,guest_name,created_at FROM rsvps WHERE invite_id=$1 ORDER BY created_at DESC LIMIT 500',[i.id]);res.json(rows);
+}));
+app.post('/api/app/invites/:id/toggle',auth,requireWrite,run(async(req,res)=>{const i=await own(req,res);if(!i)return;await db.q('UPDATE invites SET off=$1 WHERE id=$2',[!i.off,i.id]);res.json({off:!i.off});}));
+app.post('/api/app/invites/:id/delete',auth,requireWrite,run(async(req,res)=>{const i=await own(req,res);if(!i)return;await db.q('DELETE FROM invites WHERE id=$1',[i.id]);res.json({ok:true});}));
+app.get('/admin',(req,res)=>res.sendFile(path.join(__dirname,'admin.html')));
+app.get('/api/admin/dashboard',...admin,run(async(req,res)=>{
+ const {rows:[s]}=await db.q(`SELECT (SELECT COUNT(*)::int FROM users) users,(SELECT COUNT(*)::int FROM users WHERE last_seen>now()-interval '30 days') active_users,(SELECT COUNT(*)::int FROM invites) invites,(SELECT COALESCE(SUM(hits),0)::int FROM views) views,(SELECT COUNT(*)::int FROM rsvps WHERE answer='yes') yes,(SELECT COUNT(*)::int FROM rsvps WHERE answer='no') no`);
+ const daily=(await db.q(`SELECT viewed_on::text AS day,SUM(hits)::int AS views FROM views GROUP BY viewed_on ORDER BY viewed_on DESC LIMIT 30`)).rows;
+ const users=(await db.q('SELECT id::text,name,username,blocked,created_at,last_seen FROM users ORDER BY last_seen DESC LIMIT 200')).rows;
+ const invites=(await db.q('SELECT i.id,i.owner::text,i.data,i.off,i.created_at,(SELECT COUNT(*)::int FROM rsvps r WHERE r.invite_id=i.id) rsvp_count,(SELECT COALESCE(SUM(hits),0)::int FROM views v WHERE v.invite_id=i.id) view_count FROM invites i ORDER BY i.created_at DESC LIMIT 200')).rows;
+ res.json({stats:s,daily,users,invites});
+}));
+app.post('/api/admin/users/:id/block',...admin,requireWrite,run(async(req,res)=>{
+ if(String(req.params.id)===ADMIN_ID)return res.status(400).json({error:'Adminni bloklash mumkin emas'});
+ const blocked=req.body?.blocked===true;await db.q('UPDATE users SET blocked=$1 WHERE id=$2',[blocked,req.params.id]);
+ await db.q('INSERT INTO audit_logs(actor,action,target) VALUES($1,$2,$3)',[req.user.id,blocked?'block_user':'unblock_user',req.params.id]);res.json({ok:true});
+}));
+app.post('/api/admin/invites/:id/delete',...admin,requireWrite,run(async(req,res)=>{
+ await db.q('DELETE FROM invites WHERE id=$1',[req.params.id]);await db.q('INSERT INTO audit_logs(actor,action,target) VALUES($1,$2,$3)',[req.user.id,'delete_invite',req.params.id]);res.json({ok:true});
+}));
+app.post('/api/admin/invites/:id/toggle',...admin,requireWrite,run(async(req,res)=>{
+ await db.q('UPDATE invites SET off=NOT off WHERE id=$1',[req.params.id]);await db.q('INSERT INTO audit_logs(actor,action,target) VALUES($1,$2,$3)',[req.user.id,'toggle_invite',req.params.id]);res.json({ok:true});
+}));
+app.get('/api/admin/logs',...admin,run(async(req,res)=>res.json((await db.q('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 200')).rows)));
+app.use((err,req,res,next)=>{console.error('Server error:',err.code||err.name||'unknown');if(res.headersSent)return next(err);res.status(err.status||500).json({error:err.status===413?'Fayl juda katta':'Server xatosi'});});
+const sessions=new Map();
+function ask(ctx,step){const s=sessions.get(ctx.chat.id);if(!s)return; s.step=step;
+ const questions={from:'✍️ Kim nomidan taklif? Ism(lar)ni kiriting',to:'💌 Mehmonning ismi? (to‘y uchun /skip)',when:'📆 Sana: 25.12.2026 19:00',where:'📍 Manzil? (/skip)',msg:'💬 Xabar matni? (/skip)',photo:'🖼 Rasm yuboring yoki /skip'};
+ if(step==='style')return ctx.reply('🎨 Shablonni tanlang',Markup.inlineKeyboard([[Markup.button.callback('🌹 Romantik','st:1'),Markup.button.callback('👑 Klassik','st:2')],[Markup.button.callback('⚡ Zamonaviy','st:3')]]));
+ return ctx.reply(questions[step]);
 }
-
-/* ---------- Invitation page (qora dizayn, public/invite.css + public/invite.js) ---------- */
-const SEAL = { toy: '♥', tug: '★', uch: '♥', yub: '★', bosh: '✦' };
-function page(i) {
-  const O = OCC[i.occ] || OCC.bosh, isU = i.occ === 'uch';
-  const mode = (i.occ === 'tug' || i.occ === 'bosh') ? 'birthday' : 'wedding';
-  const D = JSON.stringify({ iso: i.iso, id: i.id, occ: i.occ, mode }).replace(/</g, '\\u003c');
-  const g = d => d.toISOString().replace(/[-:]|\.\d{3}/g, '');
-  const t0 = new Date(i.iso), t1 = new Date(t0.getTime() + 3 * 3600000);
-  const cal = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(O.lab + ': ' + i.from) + '&dates=' + g(t0) + '/' + g(t1) + '&location=' + encodeURIComponent(i.where || '');
-  const map = i.where ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(i.where) : '';
-  const title = isU ? esc(i.to) + ', uchrashamizmi?' : (i.occ === 'toy' ? esc(i.from) : esc(O.t));
-  const sub = isU ? '' : (i.occ === 'toy' ? '<div class="who">' + esc(O.t) + '</div>' : '<div class="who">' + esc(i.from) + '</div>');
-  return `<!doctype html><html lang="uz" data-mode="${mode}"><head><meta charset="utf-8"><title>${esc(O.lab)} — ${esc(i.from)}</title>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0D0D0D">
-<meta property="og:title" content="${esc(O.t)}"><meta property="og:description" content="${esc(i.from)} sizni taklif qilmoqda 💌">
-${i.photo ? '<meta property="og:image" content="' + BASE + '/p/' + esc(i.photo) + '">' : ''}
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Cormorant+Garamond:ital,wght@0,500;1,500;1,600&family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/s/invite.css">
-</head><body>
-<canvas id="fx" aria-hidden="true"></canvas>
-<main class="stage"><div class="glow"></div>
-<button class="env-btn idle" id="envBtn" type="button" aria-label="Konvertni yirtib ochish">
-  <div class="env" id="env"><div class="env-back"></div><div class="flap inner" id="flapIn"></div>
-  <div class="letter" id="letter"><span>${esc(O.lab)}</span></div><div class="env-front"></div>
-  <div class="flap" id="flap"></div><div class="seal" id="seal" aria-hidden="true">${SEAL[i.occ] || '✦'}</div><div class="tear" id="tear"></div></div>
-  <div class="hint" id="hint"><i></i>Yirtish uchun bosing</div>
-</button>
-<article class="invite" id="invite">
-${i.photo ? '<img class="photo" src="/p/' + esc(i.photo) + '" alt="">' : ''}
-<p class="occ">${esc(O.lab)}</p>
-${i.to && !isU ? '<p class="msg" style="margin:0 auto 8px">Hurmatli <b>' + esc(i.to) + '</b>,</p>' : ''}
-<h1>${title}</h1>${sub}
-${i.msg ? '<p class="msg">' + esc(i.msg).replace(/\n/g, '<br>') + '</p>' : ''}
-<div class="when"><div><small>Sana</small><b>${esc(i.dateText)}</b></div><div><small>Vaqt</small><b>${esc(i.time)}</b></div>${i.where ? '<div class="full"><small>Manzil</small><b>' + esc(i.where) + '</b></div>' : ''}</div>
-<div class="cd" id="cd"></div>
-${isU ? '<div class="arena" id="ar"><button class="yes" type="button" onclick="rsvp(\'yes\')">♥ HA</button><button class="no" id="no" type="button">Yo‘q</button></div><div class="cn" id="cn"></div>'
- : '<div class="rsvp" id="rsvp"><button class="yes" type="button" onclick="rsvp(\'yes\')">Boraman</button><button class="no" type="button" onclick="rsvp(\'no\')">Kela olmayman</button></div>'}
-<div class="thanks" id="thanks">Javobingiz yuborildi 💖</div>
-${map ? '<a class="lnk" target="_blank" rel="noopener" href="' + map + '">Xaritada ko‘rish</a>' : ''}
-<a class="lnk" target="_blank" rel="noopener" href="${cal}">Kalendarga qo‘shish</a>
-<div class="by">${esc(i.from)} tomonidan ilqlik bilan yaratildi</div>
-</article></main>
-<script>window.D=${D};</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-<script src="/s/invite.js"></script>
-</body></html>`;
+const steps=['from','to','when','where','msg','photo','style'];
+function advance(ctx){const s=sessions.get(ctx.chat.id);if(s)ask(ctx,steps[steps.indexOf(s.step)+1]);}
+async function finish(ctx){const s=sessions.get(ctx.chat.id);if(!s)return;
+ let d;try{d=validate(s.d);}catch(e){return ctx.reply('❌ '+e.message+' /yangi bilan qayta boshlang');}
+ d.id=newId();d.owner=ctx.from.id;await db.saveInvite(d);sessions.delete(ctx.chat.id);
+ return ctx.reply('🎉 Taklifnoma tayyor!\n'+url(d.id),Markup.inlineKeyboard([[Markup.button.url('📤 Ulashish','https://t.me/share/url?url='+encodeURIComponent(url(d.id)))]]));
 }
-
-/* ---------- Web ---------- */
-const app = express();
-app.use(express.json());
-app.use('/s', express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
-app.use('/p', express.static(path.join(DIR, 'photos'), { maxAge: '7d' }));
-app.get('/', (q, r) => r.send('Taklifnoma boti ishlayapti 💌'));
-app.get('/i/:id', (q, r) => { const i = invites[q.params.id]; if (!i) return r.status(404).send('Taklif topilmadi'); if (i.off) return r.status(410).send('Bu taklif faol emas'); r.send(page(i)); });
-app.post('/api/rsvp/:id', (q, r) => {
-  const i = invites[q.params.id]; if (!i) return r.sendStatus(404);
-  if (i.off) return r.sendStatus(410);
-  const a = q.body && q.body.answer === 'yes' ? 'yes' : 'no';
-  i.rsvp = i.rsvp || []; if (i.rsvp.length >= 200) return r.sendStatus(429);
-  i.rsvp.push({ a, at: Date.now() }); save();
-  bot.telegram.sendMessage(i.owner, `🔔 Taklifingizga javob keldi!\n${a === 'yes' ? '✅ Keladi' : '❌ Kela olmaydi'}\n(${i.to || 'mehmon'} · ${i.dateText})`).catch(() => {});
-  r.json({ ok: 1 });
-});
-
-/* ---------- Admin panel ---------- */
-const ADMIN = process.env.ADMIN_PASSWORD;
-const auth = (q, r, n) => {
-  if (!ADMIN) return r.status(503).send('ADMIN_PASSWORD o‘rnatilmagan');
-  const m = /^Basic (.+)$/.exec(q.headers.authorization || '');
-  const pw = m ? Buffer.from(m[1], 'base64').toString().split(':').slice(1).join(':') : '';
-  const a = Buffer.from(pw), b = Buffer.from(ADMIN);
-  if (a.length === b.length && crypto.timingSafeEqual(a, b)) return n();
-  r.set('WWW-Authenticate', 'Basic realm="Admin"').sendStatus(401);
-};
-const xhr = (q, r, n) => q.headers['x-admin'] === '1' ? n() : r.sendStatus(403);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-function adminPage() {
-  const all = Object.values(invites).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  const yes = all.reduce((n, i) => n + (i.rsvp || []).filter(x => x.a === 'yes').length, 0);
-  const no = all.reduce((n, i) => n + (i.rsvp || []).filter(x => x.a === 'no').length, 0);
-  const wk = all.filter(i => Date.now() - (i.createdAt || 0) < 7 * 864e5).length;
-  const byOcc = Object.keys(OCC).map(k => OCC[k].n + ': <b>' + all.filter(i => i.occ === k).length + '</b>').join(' · ');
-  const rows = all.map(i => `<tr><td>${esc(OCC[i.occ] ? OCC[i.occ].n : i.occ)}</td><td>${esc(i.from)}${i.to ? ' → ' + esc(i.to) : ''}</td><td>${esc(i.dateText)} ${esc(i.time)}</td><td>${(i.rsvp || []).filter(x => x.a === 'yes').length}/${(i.rsvp || []).filter(x => x.a === 'no').length}</td><td>${i.createdAt ? new Date(i.createdAt).toLocaleDateString('ru-RU') : '-'}</td><td><a href="/i/${esc(i.id)}" target="_blank">ko‘rish</a> <button onclick="act('toggle','${esc(i.id)}')">${i.off ? 'Yoqish' : 'O‘chirish'}</button> <button onclick="if(confirm('O‘chirilsinmi?'))act('delete','${esc(i.id)}')">🗑</button></td></tr>`).join('');
-  return `<!doctype html><html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin</title>
-<style>body{font-family:system-ui;margin:0;padding:16px;background:#f4f1ee;color:#222}h1{margin:0 0 12px}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}.c{background:#fff;border-radius:14px;padding:14px}.c b{font-size:1.6rem;display:block}.w{overflow-x:auto;margin-top:14px}table{width:100%;border-collapse:collapse;background:#fff;border-radius:14px;font-size:.85rem}td,th{padding:9px;border-bottom:1px solid #eee;text-align:left;white-space:nowrap}button{cursor:pointer;border:1px solid #ccc;background:#fff;border-radius:8px;padding:4px 8px}textarea{width:100%;border-radius:10px;border:1px solid #ccc;padding:10px;font:inherit}.p{background:#8e2f44;color:#fff;border:0;padding:10px 18px;border-radius:999px;margin-top:8px}</style></head><body>
-<h1>💌 Admin panel</h1>
-<div class="g"><div class="c">Foydalanuvchilar<b>${Object.keys(users).length}</b></div><div class="c">Takliflar<b>${all.length}</b></div><div class="c">7 kunda<b>${wk}</b></div><div class="c">✅ Keladi<b>${yes}</b></div><div class="c">❌ Kelmaydi<b>${no}</b></div></div>
-<p>${byOcc}</p>
-<div class="c"><b style="font-size:1rem">📢 Hammaga xabar yuborish</b><textarea id="bm" rows="3" placeholder="Xabar matni"></textarea><button class="p" onclick="bc()">Yuborish</button> <span id="bs"></span></div>
-<div class="w"><table><tr><th>Tur</th><th>Kim</th><th>Sana</th><th>✅/❌</th><th>Yaratilgan</th><th></th></tr>${rows || '<tr><td colspan=6>Hali taklif yo‘q</td></tr>'}</table></div>
-<script>
-function post(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json','X-Admin':'1'},body:JSON.stringify(b||{})}).then(function(r){return r.json()})}
-function act(a,id){post('/admin/'+a+'/'+id).then(function(){location.reload()})}
-function bc(){var t=document.getElementById('bm').value.trim();if(!t||!confirm('Hamma foydalanuvchilarga yuborilsinmi?'))return;document.getElementById('bs').textContent='Yuborilmoqda…';post('/admin/broadcast',{text:t}).then(function(r){document.getElementById('bs').textContent='Yuborildi: '+r.sent+', xato: '+r.failed})}
-</script></body></html>`;
+if(bot){
+ bot.use(async(ctx,next)=>{if(ctx.from){const ok=await db.upsertUser(ctx.from);if(!ok)return;}return next();});
+ bot.catch(e=>console.error('Bot xato:',e.code||e.message));
+ const start=ctx=>{sessions.set(ctx.chat.id,{step:'dir',d:{dir:'bq',occ:'toy',style:1}});return ctx.reply('💌 Taklif Qil platformasiga xush kelibsiz!\nTadbir turini tanlang:',Markup.inlineKeyboard(Object.entries(OCC).map(([id,o])=>[Markup.button.callback(o.n,'occ:'+id)]).concat(isHttps?[[Markup.button.webApp('📱 Mini App',BASE+'/app')]]:[])));};
+ bot.start(start);bot.command('yangi',start);
+ bot.command('mening',async ctx=>{const a=await db.listInvites(ctx.from.id);ctx.reply(a.length?(await Promise.all(a.slice(0,20).map(async i=>`${OCC[i.occ]?.n||'Taklif'} · ${i.dateText}\n${url(i.id)}\n✅ ${(await db.rsvpCounts(i.id)).yes}`))).join('\n\n'):'Hali taklifnoma yo‘q. /yangi');});
+ bot.command('admin',ctx=>String(ctx.from.id)===ADMIN_ID?ctx.reply('Admin panel: '+BASE+'/admin'):ctx.reply('Ruxsat yo‘q'));
+ bot.command('skip',ctx=>{const s=sessions.get(ctx.chat.id);if(!s||!['to','where','msg','photo'].includes(s.step)||(s.step==='to'&&s.d.occ!=='toy'))return ctx.reply('Bu bosqichni o‘tkazib bo‘lmaydi');advance(ctx);});
+ bot.action(/^occ:(\w+)$/,ctx=>{const s=sessions.get(ctx.chat.id);if(!s||!OCC[ctx.match[1]])return ctx.answerCbQuery();s.d.occ=ctx.match[1];ctx.answerCbQuery();ask(ctx,'from');});
+ bot.action(/^st:([123])$/,async ctx=>{const s=sessions.get(ctx.chat.id);if(!s)return ctx.answerCbQuery();s.d.style=Number(ctx.match[1]);await ctx.answerCbQuery();await finish(ctx);});
+ bot.on('text',ctx=>{const s=sessions.get(ctx.chat.id);if(!s)return start(ctx);const t=clean(ctx.message.text,400);if(s.step==='when'){if(!parseWhen(t))return ctx.reply('Format: 25.12.2026 19:00');s.d.when=t;}else if(['from','to','where','msg'].includes(s.step))s.d[s.step]=t;else return ctx.reply('Tugmani tanlang yoki rasm yuboring');advance(ctx);});
+ bot.on('photo',async ctx=>{const s=sessions.get(ctx.chat.id);if(!s||s.step!=='photo')return ctx.reply('Rasm bosqichida yuboring');
+ try{const photo=ctx.message.photo.at(-1),fileUrl=await ctx.telegram.getFileLink(photo.file_id),resp=await fetch(fileUrl);const buf=Buffer.from(await resp.arrayBuffer());if(buf.length>6*1024*1024||buf[0]!==255||buf[1]!==216)return ctx.reply('JPEG rasm kerak (6 MB gacha)');
+ const id=crypto.randomBytes(16).toString('hex')+'.jpg';await db.q('INSERT INTO photos(id,owner,content) VALUES($1,$2,$3)',[id,ctx.from.id,buf]);s.d.photo=id;advance(ctx);}catch(e){ctx.reply('Rasmni olib bo‘lmadi');}});
 }
-app.get('/admin', auth, (q, r) => r.send(adminPage()));
-app.post('/admin/delete/:id', auth, xhr, (q, r) => {
-  const i = invites[q.params.id];
-  if (i && i.photo) fs.unlink(path.join(DIR, 'photos', path.basename(i.photo)), () => {});
-  delete invites[q.params.id]; save(); r.json({ ok: 1 });
-});
-app.post('/admin/toggle/:id', auth, xhr, (q, r) => { const i = invites[q.params.id]; if (i) { i.off = !i.off; save(); } r.json({ ok: 1 }); });
-app.post('/admin/broadcast', auth, xhr, async (q, r) => {
-  const text = String((q.body && q.body.text) || '').slice(0, 3500); let sent = 0, failed = 0;
-  if (!text) return r.json({ sent, failed });
-  for (const id of Object.keys(users)) { try { await bot.telegram.sendMessage(id, text); sent++; } catch (e) { failed++; } await sleep(60); }
-  r.json({ sent, failed });
-});
-
-/* ---------- Mini App ---------- */
-let MINI = '';
-try { MINI = fs.readFileSync(path.join(__dirname, 'miniapp.html'), 'utf8').replace('__CFG__', JSON.stringify({ OCC, DIRS, BASE }).replace(/</g, '\\u003c')); } catch (e) { console.error('miniapp.html topilmadi'); }
-app.get('/app', (q, r) => r.set('Cache-Control', 'no-cache').type('html').send(MINI || 'Mini ilova topilmadi'));
-
-// Telegram initData tekshiruvi: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
-function tgAuth(q, r, n) {
-  let u;
-  try {
-    const tok = process.env.BOT_TOKEN, p = new URLSearchParams(q.headers['x-init-data'] || ''), hash = p.get('hash');
-    if (!tok || !hash) throw 0;
-    p.delete('hash');
-    const chk = [...p.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([k, v]) => k + '=' + v).join('\n');
-    const secret = crypto.createHmac('sha256', 'WebAppData').update(tok).digest();
-    const h = crypto.createHmac('sha256', secret).update(chk).digest(), given = Buffer.from(hash, 'hex');
-    if (given.length !== h.length || !crypto.timingSafeEqual(h, given)) throw 0;
-    if (Date.now() / 1000 - Number(p.get('auth_date')) > 86400) throw 0;
-    u = JSON.parse(p.get('user'));
-    if (!u || !u.id) throw 0;
-  } catch (e) { return r.sendStatus(401); }
-  q.tg = u;
-  if (!users[u.id]) { users[u.id] = { id: u.id, name: [u.first_name, u.last_name].filter(Boolean).join(' '), username: u.username || '', at: Date.now() }; saveU(); }
-  n();
-}
-const str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
-const bad = (r, m) => r.status(400).json({ error: m });
-const mine = q => Object.values(invites).filter(i => i.owner === q.tg.id);
-
-app.post('/api/app/photo', tgAuth, express.raw({ type: 'image/*', limit: '6mb' }), (q, r) => {
-  const b = q.body;
-  if (!Buffer.isBuffer(b) || b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8 || b[2] !== 0xff) return bad(r, 'Rasm JPEG bo‘lishi kerak');
-  const name = crypto.randomBytes(8).toString('hex') + '.jpg';
-  fs.writeFileSync(path.join(DIR, 'photos', name), b);
-  r.json({ photo: name });
-});
-
-app.post('/api/app/invites', tgAuth, (q, r) => {
-  const b = q.body || {}, d = {};
-  if (!DIRS[b.dir] || !OCC[b.occ]) return bad(r, 'Tur yoki tadbir noto‘g‘ri');
-  if (mine(q).length >= 50) return bad(r, 'Takliflar limiti (50) to‘ldi');
-  d.dir = b.dir; d.occ = b.occ; d.style = [1, 2, 3].includes(+b.style) ? +b.style : 1;
-  d.from = str(b.from, 400); if (!d.from) return bad(r, 'Ismingizni yozing');
-  d.to = str(b.to, 400); if (!d.to && d.occ !== 'toy') return bad(r, 'Kimga yuborishingizni yozing');
-  const w = parseWhen(str(b.when, 40)); if (!w) return bad(r, 'Sana va vaqt noto‘g‘ri');
-  Object.assign(d, { iso: w.iso, dateText: w.text, time: w.time });
-  d.where = str(b.where, 400); d.msg = str(b.msg, 400);
-  if (b.photo) {
-    if (typeof b.photo !== 'string' || !/^[a-f0-9]{16}\.jpg$/.test(b.photo) || !fs.existsSync(path.join(DIR, 'photos', b.photo))) return bad(r, 'Rasm topilmadi');
-    d.photo = b.photo;
-  }
-  const id = crypto.randomBytes(5).toString('hex');
-  invites[id] = Object.assign({ id, owner: q.tg.id, rsvp: [], createdAt: Date.now() }, d); save();
-  const url = BASE + '/i/' + id;
-  bot.telegram.sendMessage(q.tg.id, '🎉 Taklifnoma tayyor!\n\n' + url + '\n\n/mening — takliflarim').catch(() => {});
-  r.json({ id, url });
-});
-
-app.get('/api/app/invites', tgAuth, (q, r) => {
-  const cnt = (i, a) => (i.rsvp || []).filter(x => x.a === a).length;
-  r.json(mine(q).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map(i => ({
-    id: i.id, occ: i.occ, from: i.from, to: i.to || '', dateText: i.dateText, time: i.time, photo: i.photo || '',
-    off: !!i.off, yes: cnt(i, 'yes'), no: cnt(i, 'no'), url: BASE + '/i/' + i.id
-  })));
-});
-
-const own = (q, r) => { const i = invites[q.params.id]; if (!i || i.owner !== q.tg.id) { r.sendStatus(404); return null; } return i; };
-app.post('/api/app/invites/:id/toggle', tgAuth, (q, r) => { const i = own(q, r); if (!i) return; i.off = !i.off; save(); r.json({ off: i.off }); });
-app.post('/api/app/invites/:id/delete', tgAuth, (q, r) => {
-  const i = own(q, r); if (!i) return;
-  if (i.photo) fs.unlink(path.join(DIR, 'photos', path.basename(i.photo)), () => {});
-  delete invites[i.id]; save(); r.json({ ok: 1 });
-});
-
-app.listen(PORT, () => console.log('Web :' + PORT));
-
-/* ---------- Bot ---------- */
-const bot = new Telegraf(process.env.BOT_TOKEN);
-bot.use((ctx, next) => {
-  const f = ctx.from;
-  if (f && !users[f.id]) { users[f.id] = { id: f.id, name: [f.first_name, f.last_name].filter(Boolean).join(' '), username: f.username || '', at: Date.now() }; saveU(); }
-  return next();
-});
-bot.catch((e, ctx) => { console.error('Bot xato:', e.message); try { ctx.reply('⚠️ Xatolik yuz berdi. /start bilan qayta urinib ko‘ring.'); } catch (x) {} });
-const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(x => x.trim()).filter(Boolean);
-bot.command('admin', ctx => {
-  if (!ADMIN_IDS.includes(String(ctx.from.id))) return;
-  const all = Object.values(invites);
-  ctx.reply(`📊 Foydalanuvchilar: ${Object.keys(users).length}\nTakliflar: ${all.length}\nPanel: ${BASE}/admin`);
-});
-const S = {};
-const ORDER = ['from', 'to', 'when', 'where', 'msg', 'photo', 'style'];
-const skippable = (s) => s.step === 'where' || s.step === 'msg' || s.step === 'photo' || (s.step === 'to' && s.d.occ === 'toy');
-
-function prompt(ctx, step) {
-  const s = S[ctx.chat.id]; s.step = step; const o = s.d.occ;
-  const T = {
-    from: o === 'toy' ? '💍 Kimlar nomidan taklif? (masalan: Javohir & Shaxzoda)' : '✍️ Sizning ismingiz?',
-    to: o === 'toy' ? '👥 Mehmon ismi? (umumiy bo‘lsa o‘tkazib yuboring)' : '💌 Kimga yuborasiz? Ismini yozing',
-    when: '📅 Sana va vaqt?\nMasalan: 25.12.2026 19:00',
-    where: '📍 Joy nomi va manzili? (masalan: Registon restorani, Toshkent)',
-    msg: '💬 Shaxsiy xabaringizni yozing',
-    photo: '🖼 Rasm yuboring (juftlik, tug‘ilgan kun egasi va h.k.)'
-  };
-  if (step === 'style') return ctx.reply('🎨 Uslubni tanlang:', Markup.inlineKeyboard([
-    [Markup.button.callback('🌹 Romantik', 'st:1'), Markup.button.callback('👑 Klassik', 'st:2')], [Markup.button.callback('⚡ Zamonaviy', 'st:3')]]));
-  return ctx.reply(T[step], skippable(s) ? Markup.inlineKeyboard([[Markup.button.callback('⏭ O‘tkazib yuborish', 'skip')]]) : Markup.removeKeyboard());
-}
-const next = ctx => { const s = S[ctx.chat.id]; prompt(ctx, ORDER[ORDER.indexOf(s.step) + 1]); };
-
-function start(ctx) {
-  S[ctx.chat.id] = { step: 'dir', d: {} };
-  return ctx.reply('💌 Assalomu alaykum! Chiroyli onlayn taklifnoma yaratamiz.\n\nKim kimga yuboradi?',
-    Markup.inlineKeyboard(Object.entries(DIRS).map(([k, v]) => [Markup.button.callback(v, 'd:' + k)])
-      .concat(BASE.startsWith('https') ? [[Markup.button.webApp('📱 Mini ilovada yaratish', BASE + '/app')]] : [])));
-}
-bot.start(start); bot.command('yangi', start);
-bot.command('mening', ctx => {
-  const mine = Object.values(invites).filter(i => i.owner === ctx.chat.id);
-  if (!mine.length) return ctx.reply('Hali taklif yaratmagansiz. /start');
-  ctx.reply(mine.map(i => `${OCC[i.occ].n} · ${i.dateText}\n${BASE}/i/${i.id}\n✅ ${(i.rsvp || []).filter(r => r.a === 'yes').length}  ❌ ${(i.rsvp || []).filter(r => r.a === 'no').length}`).join('\n\n'));
-});
-bot.action(/^d:(\w+)/, ctx => { const s = S[ctx.chat.id]; if (!s) return ctx.answerCbQuery(); s.d.dir = ctx.match[1]; ctx.answerCbQuery(); ctx.editMessageText('Qanday tadbir?', Markup.inlineKeyboard(Object.entries(OCC).map(([k, v]) => [Markup.button.callback(v.n, 'o:' + k)]))); });
-bot.action(/^o:(\w+)/, ctx => { const s = S[ctx.chat.id]; if (!s) return ctx.answerCbQuery(); s.d.occ = ctx.match[1]; ctx.answerCbQuery(); prompt(ctx, 'from'); });
-bot.action('skip', ctx => { const s = S[ctx.chat.id]; if (!s || !skippable(s)) return ctx.answerCbQuery(); ctx.answerCbQuery(); next(ctx); });
-bot.action(/^st:(\d)/, ctx => { const s = S[ctx.chat.id]; if (!s) return ctx.answerCbQuery(); s.d.style = +ctx.match[1]; ctx.answerCbQuery(); finish(ctx); });
-
-bot.on('text', ctx => {
-  const s = S[ctx.chat.id]; if (!s) return start(ctx);
-  const t = ctx.message.text.trim().slice(0, 400);
-  if (s.step === 'from') s.d.from = t;
-  else if (s.step === 'to') s.d.to = t;
-  else if (s.step === 'when') { const w = parseWhen(t); if (!w) return ctx.reply('❗ Format noto‘g‘ri. Masalan: 25.12.2026 19:00'); Object.assign(s.d, { iso: w.iso, dateText: w.text, time: w.time }); }
-  else if (s.step === 'where') s.d.where = t;
-  else if (s.step === 'msg') s.d.msg = t;
-  else return ctx.reply('Yuqoridagi tugmalardan foydalaning yoki rasm yuboring.');
-  next(ctx);
-});
-bot.on('photo', async ctx => {
-  const s = S[ctx.chat.id]; if (!s) return start(ctx); if (s.step !== 'photo') return ctx.reply('Hozir rasm kerak emas. Savolga javob bering.');
-  try {
-    const ph = ctx.message.photo.pop(), link = await ctx.telegram.getFileLink(ph.file_id);
-    const buf = Buffer.from(await (await fetch(link.href)).arrayBuffer());
-    const name = crypto.randomBytes(8).toString('hex') + '.jpg';
-    fs.writeFileSync(path.join(DIR, 'photos', name), buf); s.d.photo = name;
-    next(ctx);
-  } catch (e) { ctx.reply('Rasmni yuklab bo‘lmadi, qayta urinib ko‘ring.'); }
-});
-
-function finish(ctx) {
-  const s = S[ctx.chat.id], id = crypto.randomBytes(5).toString('hex');
-  invites[id] = Object.assign({ id, owner: ctx.chat.id, rsvp: [], createdAt: Date.now() }, s.d); save(); delete S[ctx.chat.id];
-  const url = BASE + '/i/' + id;
-  ctx.reply('🎉 Taklifnoma tayyor!\n\n' + url + '\n\nUni xohlagan kishiga yuboring. Kimdir javob bersa, shu yerda xabar olasiz.\n/yangi — yana yaratish · /mening — takliflarim',
-    Markup.inlineKeyboard([[Markup.button.url('📤 Ulashish', 'https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent('💌 Sizga taklifnoma!'))], [Markup.button.url('👀 Ko‘rish', url)]]));
-}
-
-bot.launch().then(() => console.log('Bot ishga tushdi')).catch(e => console.error('Launch xato:', e.message));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+async function main(){db.connect();await db.migrate();app.listen(PORT,'0.0.0.0',()=>console.log('Taklif Qil port',PORT));if(bot)await bot.launch().then(()=>console.log('Telegram bot connected')).catch(()=>console.error('Bot launch failed'));else console.warn('BOT_TOKEN yo‘q: bot o‘chirilgan');}
+if(require.main===module)main().catch(e=>{console.error('Startup failed:',e.code||e.message);process.exitCode=1;});
+process.once('SIGTERM',()=>{if(bot&&bot.botInfo)bot.stop('SIGTERM');});
+module.exports={app,main};

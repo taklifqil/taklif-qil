@@ -87,3 +87,5 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
 .arena .no{position:absolute;left:12px;top:96px;padding:9px 16px;border-radius:999px;background:transparent;color:var(--ink);border:1px solid var(--line);font:500 .85rem var(--body);cursor:pointer;transition:left .25s,top .25s}
 .cn{min-height:1.4em;color:var(--mute);font-size:.85rem;margin-top:6px}
 .by{color:var(--mute);font-size:.78rem;margin-top:18px}
+
+.guest-label{display:block;text-align:center;margin:20px auto 10px;font:12px system-ui,sans-serif;color:#aaa;max-width:280px}.guest-label input{display:block;width:100%;margin:7px auto 0;padding:12px 14px;border:1px solid #84736b;border-radius:9px;background:#fff;color:#252026;font:14px system-ui,sans-serif}.guest-label input:focus{outline:2px solid #c9a24b;outline-offset:2px}
