@@ -135,6 +135,22 @@ app.post('/api/admin/invites/:id/delete',...admin,requireWrite,run(async(req,res
 app.post('/api/admin/invites/:id/toggle',...admin,requireWrite,run(async(req,res)=>{
  await db.q('UPDATE invites SET off=NOT off WHERE id=$1',[req.params.id]);await db.q('INSERT INTO audit_logs(actor,action,target) VALUES($1,$2,$3)',[req.user.id,'toggle_invite',req.params.id]);res.json({ok:true});
 }));
+// Admin-only activity based on invitation content and opt-in RSVP data.
+// Anonymous page views are aggregated; do not claim to identify anonymous viewers.
+app.get('/api/admin/activity',...admin,run(async(req,res)=>{
+ const invitations=(await db.q(`SELECT i.id,i.owner::text AS owner_id,u.name AS owner_name,
+ i.data->>'from' AS sender,i.data->>'to' AS recipient,i.data->>'msg' AS message,
+ i.data->>'when' AS event_date,i.created_at,
+ COALESCE((SELECT SUM(hits) FROM views v WHERE v.invite_id=i.id),0)::int AS views
+ FROM invites i LEFT JOIN users u ON u.id=i.owner
+ ORDER BY i.created_at DESC LIMIT 200`)).rows;
+ const responses=(await db.q(`SELECT r.id,r.invite_id,r.guest_name,r.answer,r.created_at,
+ i.owner::text AS owner_id,i.data->>'from' AS sender,i.data->>'to' AS recipient
+ FROM rsvps r JOIN invites i ON i.id=r.invite_id
+ ORDER BY r.created_at DESC LIMIT 300`)).rows;
+ res.set('Cache-Control','no-store').json({invitations,responses,
+   notice:'Anonim ko‘rishlar shaxsni aniqlamaydi; faqat umumiy son saqlanadi.'});
+}));
 app.get('/api/admin/logs',...admin,run(async(req,res)=>res.json((await db.q('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 200')).rows)));
 app.use((err,req,res,next)=>{console.error('Server error:',err.code||err.name||'unknown');if(res.headersSent)return next(err);res.status(err.status||500).json({error:err.status===413?'Fayl juda katta':'Server xatosi'});});
 const sessions=new Map();
@@ -153,10 +169,10 @@ async function finish(ctx){const s=sessions.get(ctx.chat.id);if(!s)return;
 if(bot){
  bot.use(async(ctx,next)=>{if(ctx.from){const ok=await db.upsertUser(ctx.from);if(!ok)return;}return next();});
  bot.catch(e=>console.error('Bot xato:',e.code||e.message));
- const start=ctx=>{sessions.set(ctx.chat.id,{step:'dir',d:{dir:'bq',occ:'toy',style:1}});return ctx.reply('💌 Taklif Qil platformasiga xush kelibsiz!\nTadbir turini tanlang:',Markup.inlineKeyboard(Object.entries(OCC).map(([id,o])=>[Markup.button.callback(o.n,'occ:'+id)]).concat(isHttps?[[Markup.button.webApp('📱 Mini App',BASE+'/app')]]:[])));};
+ const start=ctx=>{sessions.set(ctx.chat.id,{step:'dir',d:{dir:'bq',occ:'toy',style:1}});return ctx.reply('💌 Taklif Qil platformasiga xush kelibsiz!\nQuyidagi Mini App tugmasini bosib kirishingiz yoki tadbir turini tanlashingiz mumkin:',Markup.inlineKeyboard(Object.entries(OCC).map(([id,o])=>[Markup.button.callback(o.n,'occ:'+id)]).concat(isHttps?[[Markup.button.webApp('📱 Mini App',BASE+'/app')]]:[])));};
  bot.start(start);bot.command('yangi',start);
  bot.command('mening',async ctx=>{const a=await db.listInvites(ctx.from.id);ctx.reply(a.length?(await Promise.all(a.slice(0,20).map(async i=>`${OCC[i.occ]?.n||'Taklif'} · ${i.dateText}\n${url(i.id)}\n✅ ${(await db.rsvpCounts(i.id)).yes}`))).join('\n\n'):'Hali taklifnoma yo‘q. /yangi');});
- bot.command('admin',ctx=>String(ctx.from.id)===ADMIN_ID?ctx.reply('Admin panel: '+BASE+'/admin'):ctx.reply('Ruxsat yo‘q'));
+ bot.command('admin',ctx=>String(ctx.from.id)===ADMIN_ID?ctx.reply('♛ Admin panel',Markup.inlineKeyboard([[Markup.button.webApp('Admin panelni ochish',BASE+'/admin')]])):ctx.reply('Ruxsat yo‘q'));
  bot.command('skip',ctx=>{const s=sessions.get(ctx.chat.id);if(!s||!['to','where','msg','photo'].includes(s.step)||(s.step==='to'&&s.d.occ!=='toy'))return ctx.reply('Bu bosqichni o‘tkazib bo‘lmaydi');advance(ctx);});
  bot.action(/^occ:(\w+)$/,ctx=>{const s=sessions.get(ctx.chat.id);if(!s||!OCC[ctx.match[1]])return ctx.answerCbQuery();s.d.occ=ctx.match[1];ctx.answerCbQuery();ask(ctx,'from');});
  bot.action(/^st:([123])$/,async ctx=>{const s=sessions.get(ctx.chat.id);if(!s)return ctx.answerCbQuery();s.d.style=Number(ctx.match[1]);await ctx.answerCbQuery();await finish(ctx);});

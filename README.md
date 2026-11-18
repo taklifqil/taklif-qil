@@ -83,3 +83,19 @@ npm start
 ## Xavfsizlik
 
 `.env` yoki haqiqiy tokenlarni GitHubga hech qachon yuklamang. Admin paroli talab qilinmaydi, chunki admin huquqi **faqat serverda tekshiriladigan Telegram ID**ga bog‘langan. Telegram Login Domain konfiguratsiyasi noto‘g‘ri bo‘lsa web login ishlamaydi. `BASE_URL` haqiqiy HTTPS domen bo‘lishi kerak.
+
+## Celebration Edition — 2026-11-18
+
+- Yangi premium bayramona dizayn: konvert, oltin/plum ranglar, gul naqshlari va yengil animatsiyalar.
+- Animatsiya foydalanuvchi tomonidan o‘chiriladi; OS `prefers-reduced-motion` sozlamasi ham hurmat qilinadi.
+- Saytga Telegram sessiyasiz kirgan mehmon `https://t.me/taklifnomaqil_bot?start=studio` manziliga yo‘naltiriladi. Bot orqali **Mini App** tugmasini bosib qaytadi.
+- `/admin` Telegram ichidagi Mini App kontekstida `initData` orqali autentifikatsiyadan o‘tadi. Server `ADMIN_TELEGRAM_ID` ni alohida tekshiradi. Botda `/admin` buyrug‘i maxsus Web App tugmasini ko‘rsatadi.
+- `/api/admin/activity` faqat admin uchun: taklifnoma egasi, yuboruvchi, mo‘ljallangan mehmon, taklifnoma matni, sana, umumiy ko‘rishlar va RSVP mehmon javoblari/vaqtlarini beradi. Bular platformaning o‘zida kiritilgan ma’lumotlar; Telegram shaxsiy suhbatlari monitoring qilinmaydi. Anonim taklifnoma ochuvchilarining shaxsini aniqlamaydi.
+
+### Telefonda yuklash
+
+Ushbu ZIP arxivning **ildizida** barcha loyiha fayllari bor, ichki papkalar yo‘q. Arxivni oching; GitHub repository asosiy sahifasida `Add file → Upload files` ni tanlab fayllarni yangilang. GitHub eski fayllar bilan kelishmovchilik bersa, GitHub Codespaces orqali ZIP ichidagi yangilangan fayllarni repository ildiziga nusxalang va commit qiling. `BOT_TOKEN`, database URL va parollarni GitHub fayliga yozmang. Railway GitHub main branch'ga ulangan bo‘lsa commitdan keyin yangi deploy boshlanadi.
+
+### Ishlatishdan oldin tekshirish
+
+`npm test`, `npm run check`, keyin Railway `/health`, bot `/start`, `/admin`, Mini App login va real RSVP sinovlarini bajaring. Admin activity qismi haqiqiy DB bilan test qilinmaguncha productionda to‘liq tekshirildi deb hisoblanmaydi.

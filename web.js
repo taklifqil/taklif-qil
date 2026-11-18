@@ -8,7 +8,7 @@ let toastTimer;function toast(t){$('toast').textContent=t;$('toast').classList.a
 async function api(path,options={}){const headers={...(options.headers||{})};if(initData)headers['X-Init-Data']=initData;
  if(options.json){headers['Content-Type']='application/json';options.body=JSON.stringify(options.json);delete options.json;}
  const r=await fetch(path,{credentials:'same-origin',...options,headers});const data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||'HTTP '+r.status);return data;}
-function go(tab){if((tab==='mine'||tab==='create')&&!state.user){toast('Avval Telegram bilan kiring');return;}
+function go(tab){if((tab==='mine'||tab==='create')&&!state.user){openBot();return;}
  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id===tab));document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.tab===tab));$('crumb').textContent={home:'Bosh sahifa',create:'Konstruktor',mine:'Mening taklifnomalarim',templates:'Shablonlar'}[tab];window.scrollTo({top:0,behavior:'smooth'});if(tab==='mine')refresh();}
 document.querySelectorAll('[data-go]').forEach(n=>n.addEventListener('click',()=>go(n.dataset.go)));document.querySelectorAll('[data-tab]').forEach(n=>n.addEventListener('click',()=>go(n.dataset.tab)));
 function themeInit(){const saved=localStorage.getItem('tq_theme')||'light';document.body.classList.toggle('dark',saved==='dark');$('theme').textContent=saved==='dark'?'☀':'☾';}
@@ -36,6 +36,11 @@ async function action(action,i){try{if(action==='share'){if(navigator.share)awai
  if(action==='delete'&&!confirm('Taklifnoma butunlay o‘chirilsinmi?'))return;
  await api('/api/app/invites/'+i.id+'/'+action,{method:'POST',json:{}});await refresh();toast('O‘zgarish saqlandi');
  }catch(e){toast(e.message);}}
-document.querySelectorAll('.template').forEach(t=>t.onclick=()=>{if(!state.user)return toast('Avval tizimga kiring');reset();document.querySelector(`input[name=style][value="${t.dataset.style}"]`).checked=true;go('create');});
-async function boot(){try{state.config=await api('/api/config');state.user=await api('/api/me');$('avatar').textContent=String(state.user.id).slice(-1);$('adminLink').hidden=!state.user.admin;await refresh();}catch(e){document.querySelectorAll('.view').forEach(n=>n.classList.remove('on'));$('login').hidden=false;const username=state.config?.botUsername;if(username){const sc=document.createElement('script');sc.async=true;sc.src='https://telegram.org/js/telegram-widget.js?22';sc.setAttribute('data-telegram-login',username);sc.setAttribute('data-size','large');sc.setAttribute('data-auth-url',state.config.base+'/auth/telegram');sc.setAttribute('data-request-access','write');$('telegramLogin').append(sc);}else $('loginHelp').textContent='BOT_USERNAME sozlanmagan. Mini App orqali kiring.';}}
+document.querySelectorAll('.template').forEach(t=>t.onclick=()=>{if(!state.user)return openBot();reset();document.querySelector(`input[name=style][value="${t.dataset.style}"]`).checked=true;go('create');});
+function openBot(){
+ const username=(state.config?.botUsername||'taklifnomaqil_bot').replace(/^@/,'');
+ const link='https://t.me/'+encodeURIComponent(username)+'?start=studio';
+ if(tg?.openTelegramLink&&initData)tg.openTelegramLink(link);else window.location.assign(link);
+}
+async function boot(){try{state.config=await api('/api/config');state.user=await api('/api/me');$('avatar').textContent=String(state.user.id).slice(-1);$('adminLink').hidden=!state.user.admin;document.getElementById('mobileAdmin').hidden=!state.user.admin;await refresh();}catch(e){if(!initData&&state.config?.botUsername){openBot();return;}document.querySelectorAll('.view').forEach(n=>n.classList.remove('on'));$('login').hidden=false;const username=state.config?.botUsername;if(username){const sc=document.createElement('script');sc.async=true;sc.src='https://telegram.org/js/telegram-widget.js?22';sc.setAttribute('data-telegram-login',username);sc.setAttribute('data-size','large');sc.setAttribute('data-auth-url',state.config.base+'/auth/telegram');sc.setAttribute('data-request-access','write');$('telegramLogin').append(sc);}else $('loginHelp').textContent='BOT_USERNAME sozlanmagan. Mini App orqali kiring.';}}
 if(tg?.initData)tg.ready();boot();
