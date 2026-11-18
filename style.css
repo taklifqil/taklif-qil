@@ -58,3 +58,86 @@ button:active{transform:scale(.98)}
 @media(prefers-reduced-motion:reduce){.view,.wizard-step,.share-icon,.celebrate .share-card:after{animation:none!important}}body.reduce-motion .view,body.reduce-motion .wizard-step,body.reduce-motion .share-icon,body.reduce-motion .share-card:after{animation:none!important}
 
 .share-card{position:relative}.share-card:after{pointer-events:none}
+
+
+/* Studio v3.1 — unified ivory / plum / champagne-gold visual system */
+:root {
+  --bg:#FBF7F1; --surface:#FFFDF9; --ink:#2B2024; --muted:#75666A;
+  --plum:#4A2340; --plum-dark:#32172D; --gold:#C9A24B;
+  --on-gold:#2B1020; --border:#E7D8CA; --soft:#F4E9E4;
+  --nav-surface:#FFF9F4; --nav-inactive:#775963;
+  --focus-color:#9A692C;
+}
+body.dark {
+  --bg:#1B1620; --surface:#29212B; --ink:#FAF2EA; --muted:#C8B7BE;
+  --plum:#4A2340; --plum-dark:#32172D; --gold:#D9B76F;
+  --on-gold:#2B1020; --border:#5B4652; --soft:#392B38;
+  --nav-surface:#332A35; --nav-inactive:#D0BBC4;
+  --focus-color:#D9B76F;
+}
+body {background-color:var(--bg);color:var(--ink)}
+.topbar {border-bottom-color:var(--border);background:var(--surface)}
+.avatar {background:#E9D4C4;color:#653C49}
+body.dark .avatar{background:#573849;color:#F8E8DC}
+.editor input:not([type=radio]),.editor select,.editor textarea {
+  background:var(--surface);border-color:var(--border);color:var(--ink);
+}
+.editor :is(input,textarea,select):focus-visible,
+button:focus-visible,a:focus-visible {outline:3px solid var(--focus-color);outline-offset:3px}
+.primary,.primary:hover,.bot-login {color:var(--on-gold)!important}
+.wizard-progress>span {background:var(--gold)}
+.wizard-header p {color:var(--ink)}
+/* Bottom navigation is a floating rounded capsule, not a screen-wide rectangle. */
+@media(max-width:740px) {
+  body {padding-bottom:0}
+  .content{padding-bottom:calc(145px + env(safe-area-inset-bottom, 0px))}
+  .mobile-nav {
+    position:fixed;left:clamp(10px,3vw,24px);right:clamp(10px,3vw,24px);
+    bottom:calc(13px + env(safe-area-inset-bottom, 0px));
+    width:auto;height:76px;padding:6px;display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));align-items:stretch;
+    gap:4px;border:1px solid #FFFDFC;
+    border-radius:999px;background:var(--nav-surface);
+    box-shadow:0 14px 34px #371C2A36,0 2px 10px #38203512;
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    z-index:30;isolation:isolate;
+  }
+  body.dark .mobile-nav{border-color:#6A5160;box-shadow:0 14px 38px #07030980}
+  .mobile-nav button {
+    appearance:none;-webkit-appearance:none;
+    min-width:0;min-height:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:3px;
+    padding:7px 1px 6px;border:1px solid transparent!important;
+    border-radius:999px!important;background:transparent!important;
+    color:var(--nav-inactive)!important;font-size:13px!important;
+    cursor:pointer;position:relative;box-shadow:none;
+    transition:background-color .24s ease,color .24s ease,transform .24s ease;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .mobile-nav button svg {width:24px;height:24px;color:inherit!important;flex-shrink:0;display:block;margin:0}
+  .mobile-nav button small {font:500 clamp(10px,2.7vw,12px)/1.1 'Poppins',sans-serif!important;
+    color:inherit;white-space:nowrap;letter-spacing:-.15px}
+  .mobile-nav button.on {
+    background:linear-gradient(155deg,#5D2C4E,#421D39)!important;
+    color:#FFF7EC!important;border:1px solid #C9A24B!important;
+    border-radius:999px!important;
+    box-shadow:inset 0 2px 0 #D3AF62,0 4px 13px #4A23402A;
+    transform:translateY(-1px);
+  }
+  .mobile-nav button.on svg{color:#E7C477!important}
+  .mobile-nav button.on small{font-weight:600!important}
+  .mobile-nav button:active{transform:scale(.95)}
+  .mobile-nav button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  .mobile-nav button:not(.on):hover{background:#C9A24B20!important}
+  footer{padding-bottom:20px}
+  .hero .primary{background:var(--gold);color:var(--on-gold)!important}
+}
+@media(max-width:380px){
+  .mobile-nav{height:72px;gap:2px;left:7px;right:7px;padding:5px}
+  .mobile-nav button small{font-size:9.5px!important}
+  .mobile-nav button svg{width:22px;height:22px}
+}
+@media(prefers-reduced-motion:reduce){
+  .mobile-nav button{transition:none!important}
+}
+body.reduce-motion .mobile-nav button{transition:none!important}

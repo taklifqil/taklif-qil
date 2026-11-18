@@ -54,3 +54,10 @@ npm start
 
 ## Xavfsizlik
 API admin ruxsatini backend tekshiradi; maxfiy tokenlar faqat env'dan olinadi. Sessiya cookie HttpOnly + SameSite; Telegram imzolari serverda tekshiriladi. Login sahifasini ko'rishning o'zi admin huquqini bermaydi. Taklifnoma xabarlari admin nazorati haqida botda ogohlantirish bor.
+
+
+## Studio v3.1 — yangi pastki navigatsiya
+
+`style.css` ichida yagona ivory/plum/oltin palitrasi va Telegramga o‘xshash yumaloq suzuvchi mobil navigatsiya qo‘shildi. `web.html`dagi rang va accessible tab nomlari moslashtirildi; `web.js`da faol bo‘lim uchun `aria-current` to‘g‘ri yangilanadi. Hech qanday yangi kutubxona qo‘shilmadi. Animatsiyalar foydalanuvchining "Animatsiyani o‘chirish" sozlamasiga bo‘ysunadi.
+
+Android'dan GitHub'ga yuklashda ushbu ZIP ichidagi fayllarni repository asosiy qismiga joylang; eng kamida `style.css`, `web.html`, `web.js` yangilanishi kerak. Railway yangi commit bo‘yicha deployni avtomatik boshlashi mumkin.
