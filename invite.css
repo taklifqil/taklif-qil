@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap');
 
 /* ===== 60 / 30 / 10 =====
    60%  fon:       --bg  #0D0D0D
@@ -89,3 +90,11 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
 .by{color:var(--mute);font-size:.78rem;margin-top:18px}
 
 .guest-label{display:block;text-align:center;margin:20px auto 10px;font:12px system-ui,sans-serif;color:#aaa;max-width:280px}.guest-label input{display:block;width:100%;margin:7px auto 0;padding:12px 14px;border:1px solid #84736b;border-radius:9px;background:#fff;color:#252026;font:14px system-ui,sans-serif}.guest-label input:focus{outline:2px solid #c9a24b;outline-offset:2px}
+
+/* Shared 60/30/10 invitation palette */
+
+:root{--bg:#1B1620;--slate:#4A2340;--slate-2:#382033;--ink:#FBF7F1;--mute:#c5b6c0;--ac:#C9A24B;--ac2:#FBF7F1;--on-ac:#2B1020;--display:'Playfair Display',Georgia,serif;--body:'Poppins',sans-serif}
+html[data-mode='wedding']{--bg:#1B1620;--slate:#4A2340;--ac:#C9A24B;--ac2:#FBF7F1;--on-ac:#2B1020;--display:'Playfair Display',Georgia,serif}
+html[data-mode='birthday']{--bg:#1B1620;--slate:#4A2340;--ac:#FF6B4A;--ac2:#C9A24B;--on-ac:#2B1020;--display:'Playfair Display',Georgia,serif}
+.referral-cta{display:inline-block;margin-top:18px;border:1px solid var(--ac);color:var(--ac);border-radius:14px;padding:12px 17px;text-decoration:none;font-weight:700}
+html:not(.js) .invite{visibility:visible!important;opacity:1!important}

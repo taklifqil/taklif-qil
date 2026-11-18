@@ -66,16 +66,18 @@ function draw(){
     cx.restore();
   }
 }
-if(!reduce)gsap.ticker.add(draw);
+if(!reduce&&window.gsap)gsap.ticker.add(draw);
 
 /* konvert ochilishi */
 function showInvite(){
+  if(!window.gsap){$('invite').style.visibility='visible';$('invite').style.opacity='1';$('invite').style.transform='none';return;}
   gsap.set('#invite',{visibility:'visible'});
   gsap.fromTo('#invite',{opacity:0,y:60,scale:.88,rotationX:12},{opacity:1,y:0,scale:1,rotationX:0,duration:reduce?.01:.9,ease:'back.out(1.2)'});
   gsap.from('#invite > *',{opacity:0,y:14,stagger:.08,duration:reduce?.01:.6,delay:.35,ease:'power2.out'});
 }
 function openEnv(){
   if(opened)return;opened=true;
+  if(!window.gsap){$('envBtn').style.display='none';showInvite();return;}
   var b=$('envBtn');b.classList.remove('idle');b.disabled=true;gsap.set(b,{y:0,rotation:0});
   if(reduce){b.style.display='none';burst();showInvite();return}
   gsap.timeline()
@@ -106,17 +108,19 @@ function tick(){
 tick();setInterval(tick,1000);
 
 /* RSVP */
+if(localStorage.getItem('tq_rsvp_'+D.id)){$('rsvp')&&($('rsvp').style.display='none');$('ar')&&($('ar').style.display='none');$('thanks')&&($('thanks').style.display='block');}
 window.rsvp=async function(a){
+  const key='tq_rsvp_'+D.id; if(localStorage.getItem(key)){alert('Siz bu taklifnomaga oldin javob bergansiz.');return;}
   var buttons=document.querySelectorAll('#rsvp button,#ar button');
   buttons.forEach(function(b){b.disabled=true});
   try {
     var response=await fetch('/api/rsvp/'+encodeURIComponent(D.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer:a,name:$('guestName')?.value||''})});
-    if(!response.ok)throw new Error('Javobni saqlashda xatolik');
+    if(!response.ok){const j=await response.json().catch(()=>({}));throw new Error(j.error||(response.status===429?'Javob yuborilgan.': 'Javobni saqlashda xatolik'));}localStorage.setItem(key,a);
     var ar=$('ar'),rs=$('rsvp');if(ar)ar.style.display='none';if(rs)rs.style.display='none';
     var cn=$('cn');if(cn)cn.style.display='none';
-    $('thanks').style.display='block';if(!reduce)gsap.from('#thanks',{scale:.8,opacity:0,duration:.5,ease:'back.out(2)'});
+    $('thanks').style.display='block';if(!reduce&&window.gsap)gsap.from('#thanks',{scale:.8,opacity:0,duration:.5,ease:'back.out(2)'});
     if(a==='yes'&&!reduce){var r=$('thanks').getBoundingClientRect();for(var i=0;i<45;i++)P.push(make(isU?'heart':(w?'petal':'rect'),r.left+r.width/2,r.top,true));}
-  } catch(e) {alert('Internet yoki server xatosi: javob saqlanmadi. Qayta urinib ko‘ring.');buttons.forEach(function(b){b.disabled=false});}
+  } catch(e) {alert(e.message||'Internet yoki server xatosi. Qayta urinib ko‘ring.');buttons.forEach(function(b){b.disabled=false});}
 };
 /* "Yo'q" tugmasi qochadi (faqat uchrashuv) */
 var no=$('no');

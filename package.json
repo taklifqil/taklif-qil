@@ -1,7 +1,23 @@
 {
-  "name": "taklif-qil", "version": "2.0.0", "private": true,
+  "name": "taklif-qil",
+  "version": "3.0.0",
+  "private": true,
   "description": "Taklif Qil — Telegram bot, Mini App va web platforma",
-  "main": "server.js", "engines": {"node": ">=20"},
-  "scripts": {"start": "node server.js", "dev": "node --watch server.js", "test": "node --test *.test.js", "check": "node --check server.js && node --check db.js && node --check auth.js && node --check invitation.js && node --check validate.js"},
-  "dependencies": {"express": "^4.21.2", "telegraf": "^4.16.3", "pg": "^8.13.1", "helmet": "^8.0.0", "express-rate-limit": "^7.5.0"}
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test *.test.js",
+    "check": "node --check server.js && node --check db.js && node --check auth.js && node --check invitation.js && node --check validate.js && node --check web.js && node --check invite.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "telegraf": "^4.16.3",
+    "pg": "^8.13.1",
+    "helmet": "^8.0.0",
+    "express-rate-limit": "^7.5.0"
+  }
 }

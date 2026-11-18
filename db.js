@@ -10,8 +10,10 @@ const q = (sql, params=[]) => pool.query(sql, params);
 async function migrate() {
  await q(`CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', username TEXT NOT NULL DEFAULT '', blocked BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_seen TIMESTAMPTZ NOT NULL DEFAULT now())`);
  await q(`CREATE TABLE IF NOT EXISTS invites (id TEXT PRIMARY KEY, owner BIGINT NOT NULL REFERENCES users(id), data JSONB NOT NULL, off BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+ await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ref TEXT`);
  await q(`CREATE INDEX IF NOT EXISTS invites_owner_idx ON invites(owner,created_at DESC)`);
  await q(`CREATE TABLE IF NOT EXISTS rsvps (id BIGSERIAL PRIMARY KEY, invite_id TEXT NOT NULL REFERENCES invites(id) ON DELETE CASCADE, answer TEXT NOT NULL CHECK(answer IN ('yes','no')), guest_name TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+ await q(`CREATE TABLE IF NOT EXISTS rsvp_limits (invite_id TEXT NOT NULL REFERENCES invites(id) ON DELETE CASCADE, ip_hash TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY(invite_id,ip_hash))`);
  await q(`CREATE INDEX IF NOT EXISTS rsvps_invite_idx ON rsvps(invite_id)`);
  await q(`CREATE TABLE IF NOT EXISTS views (id BIGSERIAL PRIMARY KEY, invite_id TEXT NOT NULL REFERENCES invites(id) ON DELETE CASCADE, viewed_on DATE NOT NULL DEFAULT CURRENT_DATE, hits INTEGER NOT NULL DEFAULT 1, UNIQUE(invite_id,viewed_on))`);
  await q(`CREATE TABLE IF NOT EXISTS audit_logs (id BIGSERIAL PRIMARY KEY, actor BIGINT, action TEXT NOT NULL, target TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);

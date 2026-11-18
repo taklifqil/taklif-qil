@@ -53,6 +53,7 @@ const own=async(req,res)=>{const i=await db.invitation(req.params.id);if(!i||Str
 const notify=(id,msg)=>bot&&bot.telegram.sendMessage(id,msg).catch(()=>{});
 const summary=async i=>({...i,...await db.rsvpCounts(i.id),url:url(i.id)});
 app.get('/health',run(async(req,res)=>{await db.q('SELECT 1');res.json({ok:true,database:'connected',botConfigured:!!TOKEN});}));
+app.get('/api/system-status',...admin,run(async(req,res)=>{let database='online';try{await db.q('SELECT 1')}catch{database='offline'}res.json({database,bot:bot?.botInfo?'connected':TOKEN?'not_confirmed':'not_configured',https:isHttps,botUsername:!!process.env.BOT_USERNAME,baseUrl:BASE})}));
 app.get('/',(req,res)=>res.sendFile(path.join(__dirname,'web.html')));
 app.get('/app',(req,res)=>res.sendFile(path.join(__dirname,'web.html')));
 app.get('/legacy-app',(req,res)=>{
@@ -77,14 +78,17 @@ app.get('/p/:name',run(async(req,res)=>{
 }));
 app.get('/i/:id',run(async(req,res)=>{
  const i=await db.invitation(req.params.id);if(!i)return res.status(404).send('Taklifnoma topilmadi');if(i.off)return res.status(410).send('Taklifnoma faol emas');
- db.q('INSERT INTO views(invite_id) VALUES($1) ON CONFLICT(invite_id,viewed_on) DO UPDATE SET hits=views.hits+1',[i.id]).catch(()=>{});
+ sessionUser(req).then(u=>{if(!u||String(u.id)!==String(i.owner))return db.q('INSERT INTO views(invite_id) VALUES($1) ON CONFLICT(invite_id,viewed_on) DO UPDATE SET hits=views.hits+1',[i.id]);}).catch(()=>{});
  res.type('html').send(page(i));
 }));
 app.post('/api/rsvp/:id',rateLimit({windowMs:60*1000,limit:10}),run(async(req,res)=>{
  const i=await db.invitation(req.params.id);if(!i)return res.sendStatus(404);if(i.off)return res.sendStatus(410);
  if(!['yes','no'].includes(req.body?.answer))return res.status(400).json({error:'Javob noto‘g‘ri'});
  const guest=clean(req.body?.name,120);
- await db.q('INSERT INTO rsvps(invite_id,answer,guest_name) VALUES($1,$2,$3)',[i.id,req.body.answer,guest]);
+ const ip=String(req.ip||req.socket.remoteAddress||'unknown');const ipHash=crypto.createHmac('sha256',TOKEN||BASE).update(ip).digest('hex');
+ const {rowCount}=await db.q("INSERT INTO rsvp_limits(invite_id,ip_hash) VALUES($1,$2) ON CONFLICT(invite_id,ip_hash) DO UPDATE SET created_at=now() WHERE rsvp_limits.created_at < now()-interval '1 hour' RETURNING invite_id",[i.id,ipHash]);
+ if(!rowCount)return res.status(429).json({error:'Bu taklifnomaga yaqinda javob berilgan. Birozdan keyin urinib ko‘ring.'});
+ try{await db.q('INSERT INTO rsvps(invite_id,answer,guest_name) VALUES($1,$2,$3)',[i.id,req.body.answer,guest]);}catch(e){await db.q('DELETE FROM rsvp_limits WHERE invite_id=$1 AND ip_hash=$2',[i.id,ipHash]);throw e;}
  notify(i.owner,`💌 Yangi RSVP: ${req.body.answer==='yes'?'✅ Keladi':'❌ Kela olmaydi'}\n${guest||'Noma’lum mehmon'}\n${url(i.id)}`);
  res.json({ok:true});
 }));
@@ -118,9 +122,9 @@ app.post('/api/app/invites/:id/toggle',auth,requireWrite,run(async(req,res)=>{co
 app.post('/api/app/invites/:id/delete',auth,requireWrite,run(async(req,res)=>{const i=await own(req,res);if(!i)return;await db.q('DELETE FROM invites WHERE id=$1',[i.id]);res.json({ok:true});}));
 app.get('/admin',(req,res)=>res.sendFile(path.join(__dirname,'admin.html')));
 app.get('/api/admin/dashboard',...admin,run(async(req,res)=>{
- const {rows:[s]}=await db.q(`SELECT (SELECT COUNT(*)::int FROM users) users,(SELECT COUNT(*)::int FROM users WHERE last_seen>now()-interval '30 days') active_users,(SELECT COUNT(*)::int FROM invites) invites,(SELECT COALESCE(SUM(hits),0)::int FROM views) views,(SELECT COUNT(*)::int FROM rsvps WHERE answer='yes') yes,(SELECT COUNT(*)::int FROM rsvps WHERE answer='no') no`);
+ const {rows:[s]}=await db.q(`SELECT (SELECT COUNT(*)::int FROM users) users,(SELECT COUNT(*)::int FROM users WHERE ref IS NOT NULL) referrals,(SELECT COUNT(*)::int FROM users WHERE last_seen>now()-interval '30 days') active_users,(SELECT COUNT(*)::int FROM invites) invites,(SELECT COALESCE(SUM(hits),0)::int FROM views) views,(SELECT COUNT(*)::int FROM rsvps WHERE answer='yes') yes,(SELECT COUNT(*)::int FROM rsvps WHERE answer='no') no`);
  const daily=(await db.q(`SELECT viewed_on::text AS day,SUM(hits)::int AS views FROM views GROUP BY viewed_on ORDER BY viewed_on DESC LIMIT 30`)).rows;
- const users=(await db.q('SELECT id::text,name,username,blocked,created_at,last_seen FROM users ORDER BY last_seen DESC LIMIT 200')).rows;
+ const users=(await db.q('SELECT id::text,name,username,blocked,ref,created_at,last_seen FROM users ORDER BY last_seen DESC LIMIT 200')).rows;
  const invites=(await db.q('SELECT i.id,i.owner::text,i.data,i.off,i.created_at,(SELECT COUNT(*)::int FROM rsvps r WHERE r.invite_id=i.id) rsvp_count,(SELECT COALESCE(SUM(hits),0)::int FROM views v WHERE v.invite_id=i.id) view_count FROM invites i ORDER BY i.created_at DESC LIMIT 200')).rows;
  res.json({stats:s,daily,users,invites});
 }));
@@ -155,7 +159,7 @@ app.get('/api/admin/logs',...admin,run(async(req,res)=>res.json((await db.q('SEL
 app.use((err,req,res,next)=>{console.error('Server error:',err.code||err.name||'unknown');if(res.headersSent)return next(err);res.status(err.status||500).json({error:err.status===413?'Fayl juda katta':'Server xatosi'});});
 const sessions=new Map();
 function ask(ctx,step){const s=sessions.get(ctx.chat.id);if(!s)return; s.step=step;
- const questions={from:'✍️ Kim nomidan taklif? Ism(lar)ni kiriting',to:'💌 Mehmonning ismi? (to‘y uchun /skip)',when:'📆 Sana: 25.12.2026 19:00',where:'📍 Manzil? (/skip)',msg:'💬 Xabar matni? (/skip)',photo:'🖼 Rasm yuboring yoki /skip'};
+ const questions={from:'✍️ Kim nomidan taklif? Ism(lar)ni kiriting',to:'💌 Mehmonning ismi? (ixtiyoriy, /skip)',when:'📆 Sana: 25.12.2026 19:00',where:'📍 Manzil? (/skip)',msg:'💬 Xabar matni? (/skip)',photo:'🖼 Rasm yuboring yoki /skip'};
  if(step==='style')return ctx.reply('🎨 Shablonni tanlang',Markup.inlineKeyboard([[Markup.button.callback('🌹 Romantik','st:1'),Markup.button.callback('👑 Klassik','st:2')],[Markup.button.callback('⚡ Zamonaviy','st:3')]]));
  return ctx.reply(questions[step]);
 }
@@ -169,11 +173,14 @@ async function finish(ctx){const s=sessions.get(ctx.chat.id);if(!s)return;
 if(bot){
  bot.use(async(ctx,next)=>{if(ctx.from){const ok=await db.upsertUser(ctx.from);if(!ok)return;}return next();});
  bot.catch(e=>console.error('Bot xato:',e.code||e.message));
- const start=ctx=>{sessions.set(ctx.chat.id,{step:'dir',d:{dir:'bq',occ:'toy',style:1}});return ctx.reply('💌 Taklif Qil platformasiga xush kelibsiz!\nQuyidagi Mini App tugmasini bosib kirishingiz yoki tadbir turini tanlashingiz mumkin:',Markup.inlineKeyboard(Object.entries(OCC).map(([id,o])=>[Markup.button.callback(o.n,'occ:'+id)]).concat(isHttps?[[Markup.button.webApp('📱 Mini App',BASE+'/app')]]:[])));};
+ const start=async ctx=>{
+ const payload=ctx.startPayload||'';let greeting='💌 Taklif Qil platformasiga xush kelibsiz!';
+ if(/^ref_[a-f0-9]{10,20}$/.test(payload)){const refId=payload.slice(4);const original=await db.invitation(refId);if(original){greeting='💌 Sizni '+(original.from||'bir do‘stingiz')+' taklif qilgan edi!';await db.q('UPDATE users SET ref=COALESCE(ref,$1) WHERE id=$2',[refId,ctx.from.id]);}}
+ sessions.set(ctx.chat.id,{step:'dir',d:{dir:'bq',occ:'toy',style:1}});return ctx.reply(greeting+'\n\nℹ️ Taklifnoma matnlari va javoblar administratorga xizmat nazorati uchun ko‘rinadi. Telegram shaxsiy suhbatlari o‘qilmaydi.\n\nTadbir turini tanlang:',Markup.inlineKeyboard(Object.entries(OCC).map(([id,o])=>[Markup.button.callback(o.n,'occ:'+id)]).concat(isHttps?[[Markup.button.webApp('📱 Mini App',BASE+'/app')]]:[])));};
  bot.start(start);bot.command('yangi',start);
  bot.command('mening',async ctx=>{const a=await db.listInvites(ctx.from.id);ctx.reply(a.length?(await Promise.all(a.slice(0,20).map(async i=>`${OCC[i.occ]?.n||'Taklif'} · ${i.dateText}\n${url(i.id)}\n✅ ${(await db.rsvpCounts(i.id)).yes}`))).join('\n\n'):'Hali taklifnoma yo‘q. /yangi');});
  bot.command('admin',ctx=>String(ctx.from.id)===ADMIN_ID?ctx.reply('♛ Admin panel',Markup.inlineKeyboard([[Markup.button.webApp('Admin panelni ochish',BASE+'/admin')]])):ctx.reply('Ruxsat yo‘q'));
- bot.command('skip',ctx=>{const s=sessions.get(ctx.chat.id);if(!s||!['to','where','msg','photo'].includes(s.step)||(s.step==='to'&&s.d.occ!=='toy'))return ctx.reply('Bu bosqichni o‘tkazib bo‘lmaydi');advance(ctx);});
+ bot.command('skip',ctx=>{const s=sessions.get(ctx.chat.id);if(!s||!['to','where','msg','photo'].includes(s.step))return ctx.reply('Bu bosqichni o‘tkazib bo‘lmaydi');advance(ctx);});
  bot.action(/^occ:(\w+)$/,ctx=>{const s=sessions.get(ctx.chat.id);if(!s||!OCC[ctx.match[1]])return ctx.answerCbQuery();s.d.occ=ctx.match[1];ctx.answerCbQuery();ask(ctx,'from');});
  bot.action(/^st:([123])$/,async ctx=>{const s=sessions.get(ctx.chat.id);if(!s)return ctx.answerCbQuery();s.d.style=Number(ctx.match[1]);await ctx.answerCbQuery();await finish(ctx);});
  bot.on('text',ctx=>{const s=sessions.get(ctx.chat.id);if(!s)return start(ctx);const t=clean(ctx.message.text,400);if(s.step==='when'){if(!parseWhen(t))return ctx.reply('Format: 25.12.2026 19:00');s.d.when=t;}else if(['from','to','where','msg'].includes(s.step))s.d[s.step]=t;else return ctx.reply('Tugmani tanlang yoki rasm yuboring');advance(ctx);});

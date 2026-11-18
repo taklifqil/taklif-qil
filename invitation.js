@@ -1,3 +1,4 @@
+const BOT_USERNAME = String(process.env.BOT_USERNAME || '').replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
 const BASE = (process.env.BASE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : 'http://localhost:' + (process.env.PORT || 3000))).replace(/\/$/, '');
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const MON = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'];
@@ -68,11 +69,13 @@ ${isU ? '<div class="arena" id="ar"><button class="yes" type="button" onclick="r
 <div class="thanks" id="thanks">Javobingiz yuborildi 💖</div>
 ${map ? '<a class="lnk" target="_blank" rel="noopener" href="' + map + '">Xaritada ko‘rish</a>' : ''}
 <a class="lnk" target="_blank" rel="noopener" href="${cal}">Kalendarga qo‘shish</a>
-<div class="by">${esc(i.from)} tomonidan ilqlik bilan yaratildi</div>
+<a class="lnk referral-cta" href="${BOT_USERNAME ? 'https://t.me/' + BOT_USERNAME + '?start=ref_' + encodeURIComponent(i.id) : BASE + '/'}" target="_blank" rel="noopener">💌 O‘zingiz ham taklifnoma yarating</a>
+<div class="by">${esc(i.from)} tomonidan iliqlik bilan yaratildi</div>
 </article></main>
 <script>window.D=${D};</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="/s/invite.js"></script>
+<noscript><style>.env-btn{display:none!important}.invite{opacity:1!important;visibility:visible!important;display:block!important;transform:none!important}</style><p style="text-align:center;color:#C9A24B">Taklifnoma ochildi. Javob yuborish uchun JavaScript yoqing.</p></noscript>
 </body></html>`;
 }
 
